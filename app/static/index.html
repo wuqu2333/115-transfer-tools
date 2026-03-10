@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>115 搬运控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="hero">
+        <h1>115 网盘搬运工具</h1>
+        <p>支持 115 → 世纪互联 SharePoint、115 → 移动云盘（改后缀上传后再改回）。</p>
+      </header>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>基础设置</h2>
+          <div class="inline-actions">
+            <button id="save-settings-btn" class="primary">保存设置</button>
+            <button id="openlist-login-btn">OpenList 登录拿 token</button>
+          </div>
+        </div>
+
+        <form id="settings-form" class="form-grid">
+          <label>
+            OpenList 地址
+            <input name="openlist_base_url" placeholder="http://127.0.0.1:5244" />
+          </label>
+          <label>
+            OpenList Token
+            <input name="openlist_token" placeholder="填 token 或用右上角登录获取" />
+          </label>
+          <label>
+            OpenList 元数据密码
+            <input name="openlist_password" placeholder="默认留空" />
+          </label>
+          <label>
+            115 源根路径
+            <input name="source_115_root_path" placeholder="/115" />
+            <button type="button" id="pick-source-root-btn">从 OpenList 选择目录</button>
+          </label>
+          <label>
+            世纪互联目标路径
+            <input name="sharepoint_target_path" placeholder="/sharepoint/目标目录" />
+            <button type="button" id="pick-sharepoint-target-btn">从 OpenList 选择目录</button>
+          </label>
+          <label>
+            移动云盘（OpenList）目标路径
+            <input name="mobile_target_openlist_path" placeholder="/139yun/目标目录" />
+            <button type="button" id="pick-mobile-openlist-target-btn">从 OpenList 选择目录</button>
+          </label>
+          <label>
+            本地下载目录
+            <input name="download_base_path" placeholder="请选择本地目录" />
+            <button type="button" id="pick-download-path-btn">从本机选择目录</button>
+          </label>
+          <label>
+            移动云盘父目录 ID
+            <input name="mobile_parent_file_id" placeholder="抓包得到 parentFileId" />
+            <button type="button" id="pick-mobile-parent-id-btn">浏览移动云盘并选择目录ID</button>
+            <button type="button" id="resolve-mobile-parent-id-btn">从“移动云盘目标路径”自动解析ID</button>
+          </label>
+          <div class="inline-actions">
+            <button type="button" id="open-rapid-upload-btn">移动云盘秒传导入</button>
+            <span class="tip">每行: 文件名或路径|size（字节）|sha256</span>
+          </div>
+          <label>
+            移动云盘 x-yun-uni
+            <input name="mobile_uni" />
+          </label>
+          <label>
+            移动云盘 API Host
+            <input name="mobile_cloud_host" placeholder="https://personal-kd-njs.yun.139.com/hcy" />
+          </label>
+          <label>
+            伪装后缀
+            <input name="mobile_fake_extension" placeholder=".jpg" />
+          </label>
+          <label>
+            移动云盘 App Channel
+            <input name="mobile_app_channel" placeholder="10000023" />
+          </label>
+          <label class="full-width">
+            移动云盘 Authorization
+            <textarea name="mobile_authorization" rows="2"></textarea>
+          </label>
+          <label class="full-width">
+            移动云盘 x-yun-client-info
+            <textarea name="mobile_client_info" rows="2"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="clean_local_after_transfer" />
+            上传成功后删除本地文件
+          </label>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>选择 115 源文件</h2>
+          <div class="inline-actions">
+            <button id="load-path-btn">加载目录</button>
+            <button id="go-parent-btn">上一级</button>
+            <button id="clear-selected-btn">清空已选</button>
+          </div>
+        </div>
+        <div class="path-row">
+          <input id="browser-path-input" placeholder="/115" />
+          <button id="jump-path-btn">跳转路径</button>
+        </div>
+        <div id="browser-table" class="table-wrap compact"></div>
+        <div>
+          <h3>已选路径</h3>
+          <div id="selected-paths" class="selected-box"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>创建搬运任务</h2>
+          <button id="create-task-btn" class="primary">开始搬运</button>
+        </div>
+        <div class="task-form-grid">
+          <label>
+            搬运目标
+            <select id="provider-select">
+              <option value="sharepoint">世纪互联 SharePoint</option>
+              <option value="mobile">移动云盘</option>
+            </select>
+          </label>
+          <label>
+            目标路径（可覆盖设置）
+            <input id="task-target-path" placeholder="请选择目录（不填则使用基础设置默认值）" readonly />
+            <button type="button" id="pick-task-target-path-btn">选择目标目录</button>
+          </label>
+          <label>
+            下载目录（可覆盖设置）
+            <input id="task-download-path" placeholder="请选择本地目录（不填则使用基础设置默认值）" readonly />
+            <button type="button" id="pick-task-download-path-btn">选择下载目录</button>
+          </label>
+        </div>
+        <p id="create-task-tip" class="tip"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>任务记录</h2>
+          <button id="refresh-tasks-btn">刷新</button>
+        </div>
+        <div id="task-table" class="table-wrap"></div>
+        <h3>任务日志</h3>
+        <pre id="task-log-view" class="log-view">点击任务查看日志...</pre>
+      </section>
+    </main>
+
+    <dialog id="login-dialog">
+      <form id="login-form" method="dialog">
+        <h3>OpenList 登录</h3>
+        <label>
+          用户名
+          <input name="username" required />
+        </label>
+        <label>
+          密码
+          <input name="password" type="password" required />
+        </label>
+        <div class="inline-actions">
+          <button type="button" id="login-cancel-btn">取消</button>
+          <button value="submit" class="primary">登录并写入 token</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dir-picker-dialog">
+      <div class="picker-header">
+        <h3 id="dir-picker-title">选择目录</h3>
+      </div>
+      <div class="path-row">
+        <input id="dir-picker-path-input" />
+        <button type="button" id="dir-picker-load-btn">加载</button>
+      </div>
+      <div class="inline-actions">
+        <button type="button" id="dir-picker-parent-btn">上一级</button>
+        <button type="button" id="dir-picker-select-current-btn" class="primary">选择当前目录</button>
+        <button type="button" id="dir-picker-close-btn">关闭</button>
+      </div>
+      <div id="dir-picker-table" class="table-wrap compact"></div>
+    </dialog>
+
+    <dialog id="mobile-picker-dialog">
+      <div class="picker-header">
+        <h3>选择移动云盘父目录 ID</h3>
+      </div>
+      <p class="tip">先填写 Authorization / x-yun-uni / host，再浏览目录。</p>
+      <label>
+        当前 parentFileId
+        <input id="mobile-picker-parent-input" />
+      </label>
+      <div class="inline-actions">
+        <button type="button" id="mobile-picker-load-btn">加载目录</button>
+        <button type="button" id="mobile-picker-back-btn">返回上级</button>
+        <button type="button" id="mobile-picker-select-current-btn" class="primary">选择当前ID</button>
+        <button type="button" id="mobile-picker-close-btn">关闭</button>
+      </div>
+      <div id="mobile-picker-table" class="table-wrap compact"></div>
+    </dialog>
+
+    <dialog id="rapid-upload-dialog">
+      <h3>移动云盘秒传导入</h3>
+      <p class="tip">每行格式: 文件名|size(字节)|sha256</p>
+      <label>
+        目标 parentFileId
+        <input id="rapid-parent-id-input" placeholder="默认使用基础设置中的 parentFileId" />
+        <button type="button" id="rapid-pick-parent-btn">选择目录ID</button>
+      </label>
+      <label class="full-width">
+        待导入清单
+        <textarea id="rapid-upload-text" rows="6" placeholder="例：\nmovie.mp4|60906485|6914d7d6f4f55808745ce82d7954c81f1f18cf75ea3e39931955599e2a22dcd6"></textarea>
+      </label>
+      <div class="inline-actions">
+        <label class="file-label">
+          从文件导入（支持 JSON 或 每行 name|size|sha256）
+          <input type="file" id="rapid-upload-file" accept=".json,.txt,.log" />
+        </label>
+      </div>
+      <div class="inline-actions">
+        <button type="button" id="rapid-upload-submit-btn" class="primary">提交秒传</button>
+        <button type="button" id="rapid-upload-close-btn">关闭</button>
+      </div>
+      <pre id="rapid-upload-result" class="log-view"></pre>
+    </dialog>
+
+    <div id="toast"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

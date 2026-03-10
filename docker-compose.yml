@@ -1,0 +1,11 @@
+services:
+  transfer-tool:
+    build: .
+    container_name: transfer-tool
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+    restart: unless-stopped
+

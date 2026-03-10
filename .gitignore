@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+downloads/
+*.db
+_ref_openlist/
