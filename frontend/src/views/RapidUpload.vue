@@ -74,10 +74,15 @@ const pickerColumns = [
 ];
 
 const rootParentId = () => (settingsStore.data?.mobile_parent_file_id || "").trim();
-const currentPickerId = () =>
-  pickerStack.value.length ? pickerStack.value[pickerStack.value.length - 1].id : rootParentId();
+const currentPickerId = () => {
+  const root = rootParentId();
+  if (!pickerStack.value.length) return root || "";
+  const last = pickerStack.value[pickerStack.value.length - 1];
+  return last?.id || root || "";
+};
 const currentPickerPath = () => {
-  const names = pickerStack.value.map((s) => s.name);
+  if (!pickerStack.value.length) return "/";
+  const names = pickerStack.value.map((s) => s.name).filter(Boolean);
   return "/" + names.join("/");
 };
 
