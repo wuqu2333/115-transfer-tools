@@ -1,4 +1,4 @@
-import axios from "axios";
+ï»¿import axios from "axios";
 import crypto from "crypto";
 import { createReadStream, statSync } from "fs";
 import { logger } from "../logger";
@@ -91,7 +91,7 @@ export class MobileCloudClient {
     const resp = await axios.request({ method, url, data: payload, headers: this.headers(), timeout });
     const data = resp.data;
     if (resp.status >= 400) throw new MobileCloudError(`request failed: ${url}, http=${resp.status}`);
-    if (!data?.success) throw new MobileCloudError(`½Ó¿Ú·µ»ØÊ§°Ü: ${url}, ÏìÓ¦=${JSON.stringify(data)}`);
+    if (!data?.success) throw new MobileCloudError(`æ¥å£è¿”å›å¤±è´¥: ${url}, å“åº”=${JSON.stringify(data)}`);
     return data.data || {};
   }
 
@@ -183,7 +183,12 @@ export class MobileCloudClient {
     return urls;
   }
 
-  private async uploadParts(file_path: string, specs: PartSpec[], upload_urls: Record<number, string>) {
+  private async uploadParts(
+    file_path: string,
+    specs: PartSpec[],
+    upload_urls: Record<number, string>,
+    onProgress?: (delta: number) => void,
+  ) {
     if (!specs.length) return;
     for (const part of specs) {
       const uploadUrl = upload_urls[part.partNumber];
@@ -201,6 +206,11 @@ export class MobileCloudClient {
         continue;
       }
       const stream = createReadStream(file_path, { start: part.offset, end: part.offset + part.partSize - 1 });
+      if (onProgress) {
+        stream.on("data", (chunk: Buffer) => {
+          onProgress(chunk.length);
+        });
+      }
       const resp = await axios.put(uploadUrl, stream, {
         headers: {
           "Content-Type": "application/octet-stream",
@@ -239,11 +249,15 @@ export class MobileCloudClient {
       parent_file_id: parent,
       part_specs,
     });
-    if (!rapid_upload) throw new MobileCloudError("Ãë´«Î´ÃüÖĞ£¬ĞèÒªÕæÊµÉÏ´«");
+    if (!rapid_upload) throw new MobileCloudError("ç§’ä¼ æœªå‘½ä¸­ï¼Œéœ€è¦çœŸå®ä¸Šä¼ ");
     return { file_id, upload_id, uploaded_name, file_size: opts.file_size, content_hash: opts.content_hash };
   }
 
-  async upload_file(file_path: string, parent_file_id?: string) {
+  async upload_file(
+    file_path: string,
+    parent_file_id?: string,
+    onProgress?: (delta: number, loaded: number, total?: number) => void,
+  ) {
     const size = statSync(file_path).size;
     const hash = await sha256(file_path);
     const parent = (parent_file_id || this.parent_file_id).trim();
@@ -258,15 +272,20 @@ export class MobileCloudClient {
     });
 
     if (!rapid_upload) {
+      let uploaded = 0;
+      const notify = (delta: number) => {
+        uploaded += delta;
+        if (onProgress) onProgress(delta, uploaded, size);
+      };
       const firstBatch = part_specs.slice(0, MAX_PART_INFOS_PER_REQUEST);
       if (firstBatch.length) {
         const urls = Object.keys(upload_urls).length ? upload_urls : await this.getUploadUrls(file_id, upload_id, firstBatch);
-        await this.uploadParts(file_path, firstBatch, urls);
+        await this.uploadParts(file_path, firstBatch, urls, notify);
       }
       for (let start = MAX_PART_INFOS_PER_REQUEST; start < part_specs.length; start += MAX_PART_INFOS_PER_REQUEST) {
         const batch = part_specs.slice(start, start + MAX_PART_INFOS_PER_REQUEST);
         const urls = await this.getUploadUrls(file_id, upload_id, batch);
-        await this.uploadParts(file_path, batch, urls);
+        await this.uploadParts(file_path, batch, urls, notify);
       }
       await this.completeUpload(upload_id, file_id, hash);
     }

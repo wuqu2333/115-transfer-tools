@@ -138,7 +138,7 @@ export class TransferQueue {
       }
     }
 
-    const totalBytes = allFiles.reduce((sum, f) => sum + Number(f.size || 0), 0);
+    let totalBytes = allFiles.reduce((sum, f) => sum + Number(f.size || 0), 0);
     updateTask(task.id, {
       total_files: allFiles.length,
       total_bytes: totalBytes,
@@ -163,6 +163,30 @@ export class TransferQueue {
     const queue = new PQueue({ concurrency: DOWNLOAD_CONCURRENCY });
     let processedFiles = 0;
     let processedBytes = 0;
+    let lastProgressUpdate = 0;
+
+    const buildMessage = (stage: string) => {
+      const filePct = percent(processedFiles, allFiles.length);
+      let msg = `${stage} ${processedFiles}/${allFiles.length}（${filePct}%）`;
+      if (totalBytes > 0) {
+        const bytePct = percent(processedBytes, totalBytes);
+        msg += ` · ${formatBytes(processedBytes)}/${formatBytes(totalBytes)}（${bytePct}%）`;
+      }
+      return msg;
+    };
+
+    const updateProgress = (stage: string, force = false) => {
+      const now = Date.now();
+      if (!force && now - lastProgressUpdate < 400) return;
+      lastProgressUpdate = now;
+      updateTask(task.id, {
+        processed_files: processedFiles,
+        processed_bytes: processedBytes,
+        total_bytes: totalBytes,
+        updated_at: new Date().toISOString(),
+        message: buildMessage(stage),
+      } as any);
+    };
 
     for (let idx = 0; idx < allFiles.length; idx++) {
       const file = allFiles[idx];
@@ -171,14 +195,38 @@ export class TransferQueue {
         mkdirSync(dirname(localPath), { recursive: true });
         updateTask(task.id, { current_item: file.remote_path } as any);
 
-        const size = await this.downloadWithRetry(openlist, file.remote_path, localPath, task.id);
+        const expectedSize = Number(file.size || 0);
+        let fileDownloaded = 0;
+        const downloadLogger = this.makeFileProgressLogger(task.id, "下载", file.remote_path, idx, allFiles.length);
+        const size = await this.downloadWithRetry(
+          openlist,
+          file.remote_path,
+          localPath,
+          task.id,
+          (delta, loaded, total) => {
+            fileDownloaded = loaded;
+            processedBytes += delta;
+            downloadLogger(loaded, total || expectedSize);
+            updateProgress("下载中");
+          },
+          expectedSize,
+        );
+        if (size > fileDownloaded) processedBytes += size - fileDownloaded;
+        if (!expectedSize && size > 0) {
+          totalBytes += size;
+          updateTask(task.id, { total_bytes: totalBytes, updated_at: new Date().toISOString() } as any);
+        }
         const downloadPct = percent(idx + 1, allFiles.length);
         appendLog(task.id, `下载完成 [${idx + 1}/${allFiles.length}，${downloadPct}%]：${file.remote_path}`);
 
         if (task.provider === "sharepoint") {
           const target = this.joinRemote(task.target_path, file.relative_path);
           appendLog(task.id, `上传到世纪互联：${target}`);
-          await openlist.upload(localPath, target);
+          const uploadLogger = this.makeFileProgressLogger(task.id, "上传", target, idx, allFiles.length);
+          await openlist.upload(localPath, target, (delta, loaded, total) => {
+            uploadLogger(loaded, total || size);
+            updateProgress("上传中");
+          });
           const uploadPct = percent(idx + 1, allFiles.length);
           appendLog(task.id, `上传完成 [${idx + 1}/${allFiles.length}，${uploadPct}%]：${target}`);
         } else if (task.provider === "mobile" && mobile) {
@@ -196,13 +244,7 @@ export class TransferQueue {
         }
 
         processedFiles += 1;
-        processedBytes += size;
-        updateTask(task.id, {
-          processed_files: processedFiles,
-          processed_bytes: processedBytes,
-          updated_at: new Date().toISOString(),
-          message: `进行中 ${processedFiles}/${allFiles.length}（${percent(processedFiles, allFiles.length)}%）`,
-        } as any);
+        updateProgress("进行中", true);
       });
 
       if (idx < allFiles.length - 1) {
@@ -234,11 +276,18 @@ export class TransferQueue {
     }
   }
 
-  private async downloadWithRetry(openlist: OpenListClient, remote: string, local: string, taskId: number) {
+  private async downloadWithRetry(
+    openlist: OpenListClient,
+    remote: string,
+    local: string,
+    taskId: number,
+    onProgress?: (delta: number, loaded: number, total?: number) => void,
+    expectedTotal?: number,
+  ) {
     let lastErr: any;
     for (let attempt = 1; attempt <= DOWNLOAD_RETRY; attempt++) {
       try {
-        return await openlist.download(remote, local);
+        return await openlist.download(remote, local, onProgress, expectedTotal);
       } catch (err: any) {
         lastErr = err;
         const status = err?.response?.status;
@@ -289,7 +338,10 @@ export class TransferQueue {
     appendLog(task.id, `移动上传：改后缀 ${originalName} -> ${fakeName}`);
 
     const targetParent = await this.ensureMobileDir(mobile, settings.mobile_parent_file_id, relativeParent, dirCache);
-    const res = await mobile.upload_file(fakePath, targetParent);
+    const uploadLogger = this.makeFileProgressLogger(task.id, "上传", originalName, index, total);
+    const res = await mobile.upload_file(fakePath, targetParent, (_delta, loaded, totalBytes) => {
+      uploadLogger(loaded, totalBytes);
+    });
     appendLog(task.id, `移动上传完成 [${index + 1}/${total}，${percent(index + 1, total)}%] file_id=${res.file_id}`);
 
     const renamed = await this.ensureMobileRename(mobile, targetParent, res.file_id, originalName, 5);
@@ -483,6 +535,25 @@ export class TransferQueue {
       error_message: hasIssue ? summary : "",
     } as any);
     appendLog(task.id, `秒传任务完成：${summary}`);
+  }
+
+  private makeFileProgressLogger(taskId: number, stage: string, label: string, index: number, totalFiles: number) {
+    let lastPct = -1;
+    let lastTs = 0;
+    const safeLabel = label.length > 160 ? `${label.slice(0, 157)}...` : label;
+    return (loaded: number, total?: number) => {
+      if (!total || total <= 0) return;
+      const pct = percent(loaded, total);
+      const now = Date.now();
+      if (pct === 100 || pct >= lastPct + 10 || now - lastTs > 5000) {
+        appendLog(
+          taskId,
+          `${stage}进度 [${index + 1}/${totalFiles}] ${safeLabel}：${pct}%（${formatBytes(loaded)}/${formatBytes(total)}）`,
+        );
+        lastPct = pct;
+        lastTs = now;
+      }
+    };
   }
 
   private async existsInOpenlist(openlist: OpenListClient, dir: string, name: string) {

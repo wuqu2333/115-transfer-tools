@@ -1,5 +1,5 @@
 ﻿import axios, { AxiosInstance } from 'axios';
-import { createWriteStream, renameSync } from 'fs';
+import { createWriteStream, renameSync, statSync } from 'fs';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -89,15 +89,23 @@ export class OpenListClient {
     return s;
   }
 
-  async download(remote_path: string, local_path: string): Promise<number> {
+  async download(
+    remote_path: string,
+    local_path: string,
+    onProgress?: (delta: number, loaded: number, total?: number) => void,
+    expectedTotal?: number,
+  ): Promise<number> {
     const url = this.buildDownloadUrl(remote_path);
     mkdirSync(dirname(local_path), { recursive: true });
     const writer = createWriteStream(local_path + '.part');
     const resp = await this.session.get(url, { responseType: 'stream', timeout: 120000 });
+    const headerTotal = Number(resp.headers?.['content-length'] || 0);
+    const total = headerTotal > 0 ? headerTotal : expectedTotal || 0;
     let size = 0;
     await new Promise<void>((resolve, reject) => {
       resp.data.on('data', (chunk: Buffer) => {
         size += chunk.length;
+        if (onProgress) onProgress(chunk.length, size, total || undefined);
       });
       resp.data.pipe(writer);
       resp.data.on('end', resolve);
@@ -108,10 +116,27 @@ export class OpenListClient {
     return size;
   }
 
-  async upload(local_path: string, remote_path: string) {
+  async upload(
+    local_path: string,
+    remote_path: string,
+    onProgress?: (delta: number, loaded: number, total?: number) => void,
+  ) {
     await this.ensureDir(dirname(this.normalize(remote_path)));
     const fs = await import('fs');
     const stream = fs.createReadStream(local_path);
+    let sent = 0;
+    let total = 0;
+    try {
+      total = statSync(local_path).size;
+    } catch {
+      total = 0;
+    }
+    if (onProgress) {
+      stream.on('data', (chunk: Buffer) => {
+        sent += chunk.length;
+        onProgress(chunk.length, sent, total || undefined);
+      });
+    }
     const headers = {
       Authorization: this.token,
       'File-Path': encodeURI(this.normalize(remote_path)),
