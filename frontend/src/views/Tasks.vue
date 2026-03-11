@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, computed } from "vue";
 import { request } from "../api/request";
-import { Button, Card, Table, Tag, message, Popconfirm, Switch } from "ant-design-vue";
+import { Button, Card, Table, Tag, message, Popconfirm, Switch, Modal } from "ant-design-vue";
 
 interface TaskRow {
   id: number;
@@ -33,6 +33,9 @@ const text = {
   logEmpty: "点击“日志”查看任务输出",
   retryOk: (id: number) => `任务 #${id} 已重试`,
   autoRefresh: "实时更新",
+  exportTitle: "导出文件",
+  exportEmpty: "暂无可下载文件",
+  exportListFail: "获取导出文件失败",
   columns: {
     target: "目标",
     status: "状态",
@@ -66,6 +69,10 @@ const autoRefresh = ref(true);
 let refreshTimer: number | undefined;
 const selectedRowKeys = ref<number[]>([]);
 const hasSelection = computed(() => selectedRowKeys.value.length > 0);
+const exportModalVisible = ref(false);
+const exportFiles = ref<{ index: number; name: string }[]>([]);
+const exportTaskId = ref<number | null>(null);
+const exportLoading = ref(false);
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes <= 0) return "";
@@ -190,17 +197,40 @@ const rowSelection = computed(() => ({
   },
 }));
 
-async function downloadExport(id: number) {
-  const data: any = await request.get(`/api/tasks/${id}/export`, { responseType: "blob" });
+async function downloadExportFile(id: number, index: number, name?: string) {
+  const data: any = await request.get(`/api/tasks/${id}/export?index=${index}`, { responseType: "blob" });
   const blob = data instanceof Blob ? data : new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `export_task_${id}.json`;
+  a.download = name || `export_task_${id}_${index}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function downloadExport(id: number) {
+  exportLoading.value = true;
+  try {
+    const res: any = await request.get(`/api/tasks/${id}/exports`);
+    const files = Array.isArray(res?.files) ? res.files : [];
+    if (!files.length) {
+      message.warning(text.exportEmpty);
+      return;
+    }
+    if (files.length === 1) {
+      await downloadExportFile(id, files[0].index, files[0].name);
+      return;
+    }
+    exportFiles.value = files;
+    exportTaskId.value = id;
+    exportModalVisible.value = true;
+  } catch (e: any) {
+    message.error(e?.message || text.exportListFail);
+  } finally {
+    exportLoading.value = false;
+  }
 }
 
 onMounted(loadTasks);
@@ -292,10 +322,22 @@ watch(autoRefresh, () => {
         </template>
       </template>
     </Table>
-    <Card style="margin-top: 12px" size="small" :title="text.logTitle">
-      <pre class="log-view">{{ activeLog.join("\n") || text.logEmpty }}</pre>
-    </Card>
+  <Card style="margin-top: 12px" size="small" :title="text.logTitle">
+    <pre class="log-view">{{ activeLog.join("\n") || text.logEmpty }}</pre>
   </Card>
+  </Card>
+
+  <Modal v-model:open="exportModalVisible" :title="text.exportTitle" :footer="null" width="520">
+    <div v-if="!exportFiles.length" class="hint">{{ text.exportEmpty }}</div>
+    <div v-else class="export-list">
+      <div v-for="f in exportFiles" :key="f.index" class="export-item">
+        <span class="export-name">{{ f.name }}</span>
+        <Button size="small" :loading="exportLoading" @click="() => exportTaskId != null && downloadExportFile(exportTaskId, f.index, f.name)">
+          {{ text.download }}
+        </Button>
+      </div>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -321,6 +363,29 @@ watch(autoRefresh, () => {
   padding: 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
+}
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.export-list {
+  display: grid;
+  gap: 8px;
+}
+.export-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.export-name {
+  flex: 1;
+  font-size: 13px;
+  word-break: break-all;
 }
 </style>
 

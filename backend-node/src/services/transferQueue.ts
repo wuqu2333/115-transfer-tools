@@ -1,5 +1,5 @@
-﻿import { join, dirname, posix as pathPosix } from "path";
-import { mkdirSync, existsSync, rmSync, createWriteStream } from "fs";
+﻿import { join, dirname, resolve, posix as pathPosix } from "path";
+import { mkdirSync, existsSync, rmSync, createWriteStream, renameSync, readdirSync, rmdirSync } from "fs";
 import PQueue from "p-queue";
 import { OpenListClient } from "../clients/openlist";
 import { MobileCloudClient } from "../clients/mobile";
@@ -53,6 +53,21 @@ function joinPrefix(prefix: string, name: string) {
   if (!prefix) return name;
   if (prefix === "/") return `/${name}`;
   return `${prefix}/${name}`;
+}
+
+function sanitizeFileName(name: string) {
+  const cleaned = String(name || "root")
+    .replace(/[\\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "root";
+}
+
+function getFolderNameFromPath(pathStr: string) {
+  const norm = normalizePrefix(pathStr || "");
+  if (!norm || norm === "/") return "root";
+  const parts = norm.split("/").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "root";
 }
 
 function percent(done: number, total: number) {
@@ -331,11 +346,21 @@ export class TransferQueue {
             openlist,
             mobile,
             localPath,
+            localRoot,
             fileItem: file,
             dirCache,
             index: idx,
             total: allFiles.length,
           });
+        }
+
+        if (task.provider === "sharepoint" && settings.clean_local_after_transfer) {
+          try {
+            rmSync(localPath, { force: true });
+          } catch (_e) {
+            // ignore
+          }
+          this.pruneEmptyDirs(localPath, localRoot);
         }
 
         processedFiles += 1;
@@ -409,12 +434,13 @@ export class TransferQueue {
     openlist: OpenListClient;
     mobile: MobileCloudClient;
     localPath: string;
+    localRoot: string;
     fileItem: FileItem;
     dirCache: Record<string, string>;
     index: number;
     total: number;
   }) {
-    const { task, settings, openlist, mobile, localPath, fileItem, dirCache, index, total } = opts;
+    const { task, settings, openlist, mobile, localPath, localRoot, fileItem, dirCache, index, total } = opts;
     const fakeExtRaw = settings.mobile_fake_extension?.trim() || ".jpg";
     const fakeExt = fakeExtRaw.startsWith(".") ? fakeExtRaw : `.${fakeExtRaw}`;
     const originalName = localPath.split(/[/\\]/).pop() || "file";
@@ -429,7 +455,14 @@ export class TransferQueue {
     const existsFake = await this.existsInOpenlist(openlist, targetOpenlistDir, fakeName);
     if (existsOriginal || existsFake) {
       appendLog(task.id, `跳过上传：目标目录已存在 ${originalName} 或 ${fakeName}（${targetOpenlistDir}）`);
-      if (settings.clean_local_after_transfer && fs.existsSync(localPath)) fs.unlinkSync(localPath);
+      if (settings.clean_local_after_transfer && fs.existsSync(localPath)) {
+        try {
+          fs.unlinkSync(localPath);
+        } catch (_e) {
+          // ignore
+        }
+        this.pruneEmptyDirs(localPath, localRoot);
+      }
       return;
     }
 
@@ -451,7 +484,16 @@ export class TransferQueue {
       appendLog(task.id, `移动重命名失败：${originalName} (file_id=${res.file_id})`);
     }
 
-    if (settings.clean_local_after_transfer && fs.existsSync(fakePath)) fs.unlinkSync(fakePath);
+    if (settings.clean_local_after_transfer && fs.existsSync(fakePath)) {
+      try {
+        fs.unlinkSync(fakePath);
+      } catch (_e) {
+        // ignore
+      }
+    }
+    if (settings.clean_local_after_transfer) {
+      this.pruneEmptyDirs(fakePath, localRoot);
+    }
   }
 
   private async executeRapidTask(task: TaskRow, settings: any) {
@@ -681,108 +723,157 @@ export class TransferQueue {
     } catch (_e) {
       payload = {};
     }
-    const parentId = (payload.parent_file_id || "/").toString().trim() || "/";
-    const prefix = normalizePrefix(payload.path_prefix || "");
     const includeMissing = payload.include_missing === true;
+    const scanRaw = Number(payload.scan_concurrency ?? payload.scanConcurrency ?? 0);
+    const scanConcurrency =
+      Number.isFinite(scanRaw) && scanRaw > 0 ? Math.min(Math.max(Math.floor(scanRaw), 1), 16) : 4;
+    const rootsRaw = Array.isArray(payload.roots) && payload.roots.length ? payload.roots : null;
+    const roots = rootsRaw
+      ? rootsRaw
+          .map((r: any) => ({
+            parent_file_id: (r?.parent_file_id || "/").toString().trim() || "/",
+            path_prefix: normalizePrefix(r?.path_prefix || ""),
+          }))
+          .filter((r: any) => !!r.parent_file_id)
+      : [
+          {
+            parent_file_id: (payload.parent_file_id || "/").toString().trim() || "/",
+            path_prefix: normalizePrefix(payload.path_prefix || ""),
+          },
+        ];
 
-    const client = new MobileCloudClient(
-      settings.mobile_authorization,
-      settings.mobile_uni,
-      parentId,
-      settings.mobile_cloud_host,
-      settings.mobile_app_channel,
-      settings.mobile_client_info,
-    );
+    const exportFiles: string[] = [];
 
     const exportRoot = join(process.cwd(), "..", "data", "exports");
     mkdirSync(exportRoot, { recursive: true });
-    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-    const fileName = `mobile_sha256_${ts}_task${task.id}.json`;
-    const filePath = join(exportRoot, fileName);
-
-    updateTask(task.id, { local_download_path: filePath, updated_at: new Date().toISOString() } as any);
-    appendLog(task.id, `开始导出：${prefix || "/"}（parent=${parentId}）`);
-
-    const stream = createWriteStream(filePath, { encoding: "utf8" });
-    const write = async (chunk: string) => {
-      if (!stream.write(chunk)) {
-        await new Promise<void>((resolve) => stream.once("drain", resolve));
-      }
-    };
-
-    let first = true;
     let totalFiles = 0;
     let exported = 0;
     let missing = 0;
     let lastLog = 0;
     let lastUpdate = 0;
 
-    await write("[");
+    for (let idx = 0; idx < roots.length; idx++) {
+      const root = roots[idx];
+      const parentId = root.parent_file_id;
+      const prefix = normalizePrefix(root.path_prefix || "");
+      const folderName = sanitizeFileName(getFolderNameFromPath(prefix));
+      const tmpName = `export_tmp_${task.id}_${idx}.json`;
+      const tmpPath = join(exportRoot, tmpName);
 
-    const writeItem = async (obj: any) => {
-      const line = JSON.stringify(obj);
-      if (first) {
-        await write(line);
-        first = false;
-      } else {
-        await write(`,${line}`);
-      }
-      exported += 1;
-    };
+      const client = new MobileCloudClient(
+        settings.mobile_authorization,
+        settings.mobile_uni,
+        parentId,
+        settings.mobile_cloud_host,
+        settings.mobile_app_channel,
+        settings.mobile_client_info,
+      );
 
-    const walk = async (pid: string, curPrefix: string) => {
-      if (checkStop()) return;
-      const list = await client.list_dir(pid);
-      for (const it of list) {
-        if (checkStop()) return;
-        const nextName = joinPrefix(curPrefix, it.name);
-        if (it.is_dir) {
-          await walk(it.file_id, nextName);
+      appendLog(task.id, `开始导出：${prefix || "/"}（parent=${parentId}，扫描并发=${scanConcurrency}）`);
+      const stream = createWriteStream(tmpPath, { encoding: "utf8" });
+      const write = async (chunk: string) => {
+        if (!stream.write(chunk)) {
+          await new Promise<void>((resolve) => stream.once("drain", resolve));
+        }
+      };
+
+      let first = true;
+      let exportedThis = 0;
+      let writeChain = Promise.resolve();
+
+      await write("[");
+
+      const enqueueWrite = (chunk: string) => {
+        writeChain = writeChain.then(() => write(chunk));
+        return writeChain;
+      };
+
+      const writeItem = async (obj: any) => {
+        const line = JSON.stringify(obj);
+        if (first) {
+          first = false;
+          await enqueueWrite(line);
         } else {
-          totalFiles += 1;
-          const size = Number(it.size || 0);
-          const sha256 = extractSha256(it);
-          if (sha256) {
-            await writeItem({ name: nextName, size, sha256 });
-          } else {
-            missing += 1;
-            if (includeMissing) await writeItem({ name: nextName, size, sha256: "" });
+          await enqueueWrite(`,${line}`);
+        }
+        exported += 1;
+        exportedThis += 1;
+      };
+
+      const queue = new PQueue({ concurrency: scanConcurrency });
+      const enqueueDir = (pid: string, curPrefix: string) => {
+        queue.add(async () => {
+          if (checkStop()) return;
+          let list: any[] = [];
+          try {
+            list = await client.list_dir(pid);
+          } catch (e: any) {
+            appendLog(task.id, `读取目录失败：${curPrefix || "/"} -> ${e?.message || String(e)}`);
+            throw e;
           }
-        }
+          for (const it of list) {
+            if (checkStop()) return;
+            const nextName = joinPrefix(curPrefix, it.name);
+            if (it.is_dir) {
+              enqueueDir(it.file_id, nextName);
+            } else {
+              totalFiles += 1;
+              const size = Number(it.size || 0);
+              const sha256 = extractSha256(it);
+              if (sha256) {
+                await writeItem({ name: nextName, size, sha256 });
+              } else {
+                missing += 1;
+                if (includeMissing) await writeItem({ name: nextName, size, sha256: "" });
+              }
+            }
 
-        const now = Date.now();
-        if (now - lastLog > 3000) {
-          appendLog(task.id, `已扫描 ${totalFiles} 个文件，已导出 ${exported} 条`);
-          lastLog = now;
-        }
-        if (now - lastUpdate > 600) {
-          updateTask(task.id, {
-            processed_files: exported,
-            total_files: totalFiles,
-            current_item: nextName,
-            updated_at: new Date().toISOString(),
-            message: `导出中 已扫描 ${totalFiles}，已导出 ${exported}`,
-          } as any);
-          lastUpdate = now;
-        }
-      }
-    };
+            const now = Date.now();
+            if (now - lastLog > 3000) {
+              appendLog(task.id, `已扫描 ${totalFiles} 个文件，已导出 ${exported} 条`);
+              lastLog = now;
+            }
+            if (now - lastUpdate > 600) {
+              updateTask(task.id, {
+                processed_files: exported,
+                total_files: totalFiles,
+                current_item: nextName,
+                updated_at: new Date().toISOString(),
+                message: `导出中 已扫描 ${totalFiles}，已导出 ${exported}`,
+              } as any);
+              lastUpdate = now;
+            }
+          }
+        });
+      };
 
-    await walk(parentId, prefix);
-    if (stopFlag || checkStop()) {
+      enqueueDir(parentId, prefix);
+      await queue.onIdle();
+      await writeChain;
       await write("]");
       await new Promise<void>((resolve, reject) => {
         stream.end(() => resolve());
         stream.on("error", reject);
       });
-      this.markStopped(task.id);
-      return;
+
+      if (stopFlag || checkStop()) {
+        this.markStopped(task.id);
+        return;
+      }
+
+      const base = `${folderName}_${exportedThis}`;
+      let finalName = `${base}.json`;
+      let finalPath = join(exportRoot, finalName);
+      let suffix = 1;
+      while (existsSync(finalPath)) {
+        suffix += 1;
+        finalName = `${base}_${suffix}.json`;
+        finalPath = join(exportRoot, finalName);
+      }
+      renameSync(tmpPath, finalPath);
+      exportFiles.push(finalPath);
+      appendLog(task.id, `导出完成：${finalName}`);
     }
-    await write("]");
-    await new Promise<void>((resolve, reject) => {
-      stream.end(() => resolve());
-      stream.on("error", reject);
-    });
 
     updateTask(task.id, {
       status: "success",
@@ -791,9 +882,30 @@ export class TransferQueue {
       current_item: "",
       processed_files: exported,
       total_files: totalFiles,
-      message: `导出完成：${fileName}，已导出 ${exported} 条，缺少 ${missing} 条`,
+      message: `导出完成：文件数 ${exported}，缺少 ${missing}，导出文件 ${exportFiles.length} 个`,
+      local_download_path: exportFiles.length === 1 ? exportFiles[0] : JSON.stringify(exportFiles),
     } as any);
-    appendLog(task.id, `导出完成：${filePath}`);
+  }
+
+  private pruneEmptyDirs(filePath: string, rootPath: string) {
+    if (!filePath || !rootPath) return;
+    const root = resolve(rootPath);
+    let current = resolve(dirname(filePath));
+    while (current.startsWith(root)) {
+      try {
+        if (!existsSync(current)) {
+          current = dirname(current);
+          continue;
+        }
+        const entries = readdirSync(current);
+        if (entries.length > 0) break;
+        rmdirSync(current);
+      } catch (_e) {
+        break;
+      }
+      if (current === root) break;
+      current = dirname(current);
+    }
   }
 
   private makeFileProgressLogger(taskId: number, stage: string, label: string, index: number, totalFiles: number) {
@@ -803,8 +915,12 @@ export class TransferQueue {
     return (loaded: number, total?: number) => {
       if (!total || total <= 0) return;
       const pct = percent(loaded, total);
+      if (pct >= 100 && lastPct >= 100) return;
       const now = Date.now();
-      if (pct === 100 || pct >= lastPct + 10 || now - lastTs > 5000) {
+      const hitStep = pct >= lastPct + 10;
+      const hitTime = now - lastTs > 5000;
+      const hitDone = pct >= 100 && lastPct < 100;
+      if (hitDone || hitStep || hitTime) {
         appendLog(
           taskId,
           `${stage}进度 [${index + 1}/${totalFiles}] ${safeLabel}：${pct}%（${formatBytes(loaded)}/${formatBytes(total)}）`,

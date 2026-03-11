@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, reactive, ref, computed } from "vue";
 import { request } from "../api/request";
 import { useSettingsStore } from "../stores/settings";
 import { Button, Card, Form, Input, InputNumber, Upload, Switch, message, Modal, Table } from "ant-design-vue";
@@ -29,11 +29,15 @@ const text = {
   example: "示例：\nmovie.mp4|60906485|6914d7d6f4f55808745ce82d7954c81f1f18cf75ea3e39931955599e2a22dcd6",
   exportTitle: "移动云盘 SHA256 导出",
   exportTip: "仅导出移动云盘目录内已有 SHA256 的文件；缺少 SHA256 的会被跳过。",
-  exportDirLabel: "导出目录",
-  exportDirPlaceholder: "默认使用移动云盘父目录",
+  exportDirLabel: "已选目录",
+  exportDirPlaceholder: "请选择需要导出的目录",
   exportSelectDir: "选择目录",
+  exportClearDir: "清空选择",
   exportBtn: "导出清单",
+  exportConcurrencyLabel: "扫描并发数",
+  exportConcurrencyHint: "建议 2-6，过高可能被限速",
   exportNeedParent: "无法获取移动云盘目录（请检查 Authorization / x-yun-uni）",
+  exportNeedDir: "请先选择要导出的目录",
   exportOk: (count: number) => `已导出 ${count} 条`,
   exportWarn: (count: number) => `已导出 ${count} 条（部分文件缺少 SHA256）`,
   exportQueued: (id: number) => `导出任务已创建 #${id}，请到“任务记录”查看进度`,
@@ -42,6 +46,7 @@ const text = {
   pickerPath: "当前目录",
   pickerParent: "上一级",
   pickerChoose: "选择当前目录",
+  pickerAddSelected: "添加已选目录",
   pickerName: "目录名称",
   pickerAction: "操作",
   pickerEnter: "进入",
@@ -58,21 +63,29 @@ const concurrency = ref(8);
 const retryTimes = ref(2);
 const asTask = ref(true);
 const exporting = ref(false);
+const exportConcurrency = ref(4);
 
-const exportForm = reactive({
-  parent_file_id: "",
-  path: "/",
-});
+const exportDirs = ref<{ id: string; path: string }[]>([]);
 
 const pickerVisible = ref(false);
 const pickerLoading = ref(false);
 const pickerItems = ref<MobileItem[]>([]);
 const pickerStack = ref<{ id: string; name: string }[]>([]);
+const pickerSelectedKeys = ref<string[]>([]);
+const pickerSelectedRows = ref<MobileItem[]>([]);
 
 const pickerColumns = [
   { title: text.pickerName, dataIndex: "name" },
   { title: text.pickerAction, dataIndex: "action", width: 120 },
 ];
+
+const pickerRowSelection = computed(() => ({
+  selectedRowKeys: pickerSelectedKeys.value,
+  onChange: (keys: any[], rows: any[]) => {
+    pickerSelectedKeys.value = keys as string[];
+    pickerSelectedRows.value = rows as MobileItem[];
+  },
+}));
 
 const rootParentId = () => "/";
 const currentPickerId = () => {
@@ -92,9 +105,6 @@ onMounted(async () => {
     await settingsStore.fetch();
     if (!form.parent_file_id.trim() && settingsStore.data.mobile_parent_file_id) {
       form.parent_file_id = settingsStore.data.mobile_parent_file_id;
-    }
-    if (!exportForm.parent_file_id.trim()) {
-      exportForm.parent_file_id = "/";
     }
   } catch {
     // ignore settings load errors
@@ -234,6 +244,8 @@ async function loadMobileDirs(parentId: string) {
 function openExportPicker() {
   const rootId = rootParentId();
   pickerStack.value = [];
+  pickerSelectedKeys.value = [];
+  pickerSelectedRows.value = [];
   pickerVisible.value = true;
   loadMobileDirs(rootId);
 }
@@ -241,6 +253,8 @@ function openExportPicker() {
 function pickerEnterDir(record: MobileItem) {
   if (!record.is_dir) return;
   pickerStack.value.push({ id: record.file_id, name: record.name });
+  pickerSelectedKeys.value = [];
+  pickerSelectedRows.value = [];
   loadMobileDirs(record.file_id);
 }
 
@@ -251,14 +265,39 @@ function pickerGoParent() {
     return;
   }
   pickerStack.value.pop();
+  pickerSelectedKeys.value = [];
+  pickerSelectedRows.value = [];
   const parentId = currentPickerId();
   if (parentId) loadMobileDirs(parentId);
 }
 
 function pickerChooseCurrent() {
   const currentId = currentPickerId();
-  exportForm.parent_file_id = currentId;
-  exportForm.path = currentPickerPath() || "/";
+  const path = currentPickerPath() || "/";
+  if (!currentId) {
+    message.error(text.exportNeedParent);
+    return;
+  }
+  if (!exportDirs.value.find((d) => d.id === currentId)) {
+    exportDirs.value.push({ id: currentId, path });
+  }
+  pickerVisible.value = false;
+}
+
+function pickerAddSelected() {
+  const basePath = currentPickerPath() || "/";
+  if (!pickerSelectedRows.value.length) {
+    message.warning(text.exportNeedDir);
+    return;
+  }
+  pickerSelectedRows.value.forEach((row) => {
+    const path = basePath === "/" ? `/${row.name}` : `${basePath}/${row.name}`;
+    if (!exportDirs.value.find((d) => d.id === row.file_id)) {
+      exportDirs.value.push({ id: row.file_id, path });
+    }
+  });
+  pickerSelectedKeys.value = [];
+  pickerSelectedRows.value = [];
   pickerVisible.value = false;
 }
 
@@ -275,12 +314,15 @@ function downloadJson(data: any, filename: string) {
 }
 
 async function exportSha256() {
-  const parentId = exportForm.parent_file_id.trim() || rootParentId();
+  if (!exportDirs.value.length) {
+    message.warning(text.exportNeedDir);
+    return;
+  }
   exporting.value = true;
   try {
     const res: any = await request.post("/api/mobile/export-hash", {
-      parent_file_id: parentId,
-      path_prefix: exportForm.path || "/",
+      roots: exportDirs.value.map((d) => ({ parent_file_id: d.id, path_prefix: d.path })),
+      scan_concurrency: Number(exportConcurrency.value) || undefined,
       as_task: true,
     });
     if (res?.task_id) {
@@ -302,6 +344,14 @@ async function exportSha256() {
   } finally {
     exporting.value = false;
   }
+}
+
+function removeExportDir(id: string) {
+  exportDirs.value = exportDirs.value.filter((d) => d.id !== id);
+}
+
+function clearExportDirs() {
+  exportDirs.value = [];
 }
 </script>
 
@@ -348,9 +398,22 @@ async function exportSha256() {
       <p class="tip">{{ text.exportTip }}</p>
       <Form layout="vertical">
         <Form.Item :label="text.exportDirLabel">
-          <div class="inline-row">
-            <Input v-model:value="exportForm.path" :placeholder="text.exportDirPlaceholder" readonly />
+          <div class="selected-box">
+            <span v-for="d in exportDirs" :key="d.id" class="pill">
+              {{ d.path }}
+              <button @click="removeExportDir(d.id)">x</button>
+            </span>
+            <span v-if="!exportDirs.length" class="hint">{{ text.exportDirPlaceholder }}</span>
+          </div>
+          <div class="inline-row" style="margin-top: 8px">
             <Button @click="openExportPicker">{{ text.exportSelectDir }}</Button>
+            <Button @click="clearExportDirs">{{ text.exportClearDir }}</Button>
+          </div>
+        </Form.Item>
+        <Form.Item :label="text.exportConcurrencyLabel">
+          <div class="inline-row">
+            <InputNumber v-model:value="exportConcurrency" :min="1" :max="16" :step="1" />
+            <span class="hint">{{ text.exportConcurrencyHint }}</span>
           </div>
         </Form.Item>
         <Button type="primary" :loading="exporting" @click="exportSha256">{{ text.exportBtn }}</Button>
@@ -363,7 +426,8 @@ async function exportSha256() {
     <div class="picker-bar">
       <Input :value="currentPickerPath()" :placeholder="text.pickerPath" readonly />
       <Button @click="pickerGoParent">{{ text.pickerParent }}</Button>
-      <Button type="primary" @click="pickerChooseCurrent">{{ text.pickerChoose }}</Button>
+      <Button @click="pickerChooseCurrent">{{ text.pickerChoose }}</Button>
+      <Button type="primary" @click="pickerAddSelected">{{ text.pickerAddSelected }}</Button>
     </div>
     <Table
       :columns="pickerColumns"
@@ -372,6 +436,7 @@ async function exportSha256() {
       row-key="file_id"
       size="small"
       :pagination="false"
+      :row-selection="pickerRowSelection"
       :customRow="(record) => ({ onDblclick: () => (record as any).is_dir && pickerEnterDir(record as any) })"
     >
       <template #bodyCell="{ column, record }">
@@ -410,9 +475,33 @@ async function exportSha256() {
   font-size: 12px;
   color: var(--muted);
 }
+.selected-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  background: var(--panel-2);
+}
+.pill button {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  line-height: 16px;
+  font-size: 12px;
+}
 .picker-bar {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 8px;
   margin-bottom: 10px;
 }

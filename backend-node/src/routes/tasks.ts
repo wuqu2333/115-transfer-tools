@@ -6,6 +6,30 @@ import { ok, fail } from "../helpers";
 
 export const router = Router();
 
+const exportRoot = path.resolve(process.cwd(), "..", "data", "exports");
+
+function parseExportFiles(raw: string): string[] {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) return arr.map((p) => String(p));
+    } catch {
+      return [];
+    }
+  }
+  return [trimmed];
+}
+
+function getExportFiles(task: any): string[] {
+  const raw = String(task?.local_download_path || "");
+  const list = parseExportFiles(raw);
+  return list
+    .map((p) => path.resolve(String(p)))
+    .filter((p) => p.startsWith(exportRoot) && existsSync(p));
+}
+
 function stopTaskInternal(id: number) {
   const task = getTask(id);
   if (!task) throw new Error("task not found");
@@ -116,12 +140,29 @@ router.get("/tasks/:id/export", (req, res) => {
   const task = getTask(id);
   if (!task) return fail(res, 404, "task not found");
   if (task.provider !== "mobile_export") return fail(res, 400, "not export task");
-  const filePath = String(task.local_download_path || "");
-  if (!filePath || !existsSync(filePath)) return fail(res, 404, "export file not found");
-  const exportRoot = path.resolve(process.cwd(), "..", "data", "exports");
-  const resolved = path.resolve(filePath);
-  if (!resolved.startsWith(exportRoot)) return fail(res, 403, "invalid export path");
-  return res.download(resolved, path.basename(resolved));
+  const files = getExportFiles(task);
+  if (!files.length) return fail(res, 404, "export file not found");
+  const indexRaw = req.query.index;
+  if (indexRaw == null) {
+    if (files.length !== 1) return fail(res, 400, "export files multiple, specify index");
+    return res.download(files[0], path.basename(files[0]));
+  }
+  const idx = Number(indexRaw);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= files.length) return fail(res, 400, "invalid index");
+  return res.download(files[idx], path.basename(files[idx]));
+});
+
+router.get("/tasks/:id/exports", (req, res) => {
+  const id = Number(req.params.id);
+  const task = getTask(id);
+  if (!task) return fail(res, 404, "task not found");
+  if (task.provider !== "mobile_export") return fail(res, 400, "not export task");
+  const files = getExportFiles(task);
+  if (!files.length) return fail(res, 404, "export file not found");
+  ok(res, {
+    files: files.map((p, index) => ({ index, name: path.basename(p) })),
+    count: files.length,
+  });
 });
 
 router.post("/tasks/batch", (req, res) => {

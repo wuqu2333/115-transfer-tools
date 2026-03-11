@@ -396,6 +396,8 @@ router.post("/mobile/export-hash", async (req, res) => {
     const parent = (req.body?.parent_file_id || "/").toString().trim() || "/";
     const includeMissing = req.body?.include_missing === true;
     const basePrefix = normalizePrefix(req.body?.path_prefix || "");
+    const roots = Array.isArray(req.body?.roots) ? req.body.roots : null;
+    const scanConcurrency = Number(req.body?.scan_concurrency ?? req.body?.scanConcurrency ?? 0) || undefined;
     const asTask = req.body?.as_task !== false;
 
     if (asTask) {
@@ -403,7 +405,9 @@ router.post("/mobile/export-hash", async (req, res) => {
       const payload = {
         parent_file_id: parent,
         path_prefix: basePrefix,
+        roots,
         include_missing: includeMissing,
+        scan_concurrency: scanConcurrency,
       };
       const id = insertTask({
         provider: "mobile_export" as any,
@@ -425,7 +429,10 @@ router.post("/mobile/export-hash", async (req, res) => {
         started_at: null,
         finished_at: null,
       } as any);
-      appendLog(id, `导出任务已入队：parent=${parent}，prefix=${basePrefix || "/"}，includeMissing=${includeMissing}`);
+      appendLog(
+        id,
+        `导出任务已入队：parent=${parent}，prefix=${basePrefix || "/"}，includeMissing=${includeMissing}，扫描并发=${scanConcurrency || 4}`,
+      );
       return ok(res, { task_id: id });
     }
 
