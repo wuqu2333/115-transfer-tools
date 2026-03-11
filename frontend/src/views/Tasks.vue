@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, watch, computed } from "vue";
 import { request } from "../api/request";
 import { Button, Card, Table, Tag, message, Popconfirm, Switch } from "ant-design-vue";
 
@@ -21,7 +21,14 @@ const text = {
   retry: "重试",
   remove: "删除",
   download: "下载",
+  stop: "终止",
+  batchStop: "批量终止",
+  batchDelete: "批量删除",
+  batchRetry: "批量重试",
+  batchDone: (ok: number, failed: number) => `批量完成：成功 ${ok}，失败 ${failed}`,
+  needSelect: "请先选择任务",
   removeOk: (id: number) => `任务 #${id} 已删除`,
+  stopOk: (id: number) => `任务 #${id} 已终止`,
   logTitle: "任务日志",
   logEmpty: "点击“日志”查看任务输出",
   retryOk: (id: number) => `任务 #${id} 已重试`,
@@ -57,6 +64,8 @@ const activeLog = ref<string[]>([]);
 const activeTaskId = ref<number | null>(null);
 const autoRefresh = ref(true);
 let refreshTimer: number | undefined;
+const selectedRowKeys = ref<number[]>([]);
+const hasSelection = computed(() => selectedRowKeys.value.length > 0);
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes <= 0) return "";
@@ -122,6 +131,12 @@ async function retryTask(id: number) {
   loadTasks();
 }
 
+async function stopTask(id: number) {
+  await request.post(`/api/tasks/${id}/stop`);
+  message.success(text.stopOk(id));
+  loadTasks();
+}
+
 async function deleteTask(id: number) {
   await request.delete(`/api/tasks/${id}`);
   message.success(text.removeOk(id));
@@ -135,7 +150,13 @@ function showLog(record: TaskRow) {
 }
 
 function statusTag(status: string) {
-  const map: Record<string, string> = { success: "green", failed: "red", running: "blue", pending: "default" };
+  const map: Record<string, string> = {
+    success: "green",
+    failed: "red",
+    running: "blue",
+    pending: "default",
+    stopped: "orange",
+  };
   return map[status] || "default";
 }
 
@@ -148,6 +169,26 @@ function providerLabel(provider: string) {
   };
   return map[provider] || provider;
 }
+
+async function batchAction(action: "stop" | "delete" | "retry") {
+  if (!selectedRowKeys.value.length) {
+    message.warning(text.needSelect);
+    return;
+  }
+  const res: any = await request.post("/api/tasks/batch", { action, ids: selectedRowKeys.value });
+  const okCount = Array.isArray(res?.ok) ? res.ok.length : 0;
+  const failCount = Array.isArray(res?.failed) ? res.failed.length : 0;
+  message.success(text.batchDone(okCount, failCount));
+  selectedRowKeys.value = [];
+  loadTasks();
+}
+
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: any[]) => {
+    selectedRowKeys.value = keys as number[];
+  },
+}));
 
 async function downloadExport(id: number) {
   const data: any = await request.get(`/api/tasks/${id}/export`, { responseType: "blob" });
@@ -194,12 +235,22 @@ watch(autoRefresh, () => {
   <Card :title="text.title" :bordered="false">
     <div class="list-actions">
       <Button @click="loadTasks">{{ text.refresh }}</Button>
+      <Button :disabled="!hasSelection" @click="() => batchAction('stop')">{{ text.batchStop }}</Button>
+      <Button :disabled="!hasSelection" @click="() => batchAction('retry')">{{ text.batchRetry }}</Button>
+      <Popconfirm
+        title="确定批量删除已选任务？"
+        ok-text="删除"
+        cancel-text="取消"
+        @confirm="() => batchAction('delete')"
+      >
+        <Button :disabled="!hasSelection" danger>{{ text.batchDelete }}</Button>
+      </Popconfirm>
       <div class="auto-refresh">
         <span>{{ text.autoRefresh }}</span>
         <Switch v-model:checked="autoRefresh" />
       </div>
     </div>
-    <Table :columns="columns" :data-source="dataSource" :loading="loading" size="small" row-key="id">
+    <Table :columns="columns" :data-source="dataSource" :loading="loading" size="small" row-key="id" :row-selection="rowSelection">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'status'">
           <Tag :color="statusTag((record as any).status)">{{ (record as any).status }}</Tag>
@@ -217,6 +268,15 @@ watch(autoRefresh, () => {
           >
             {{ text.download }}
           </Button>
+          <Popconfirm
+            v-if="['running','pending'].includes((record as any).status)"
+            title="确定终止该任务？"
+            ok-text="终止"
+            cancel-text="取消"
+            @confirm="() => stopTask((record as any).id)"
+          >
+            <Button size="small" danger style="margin-right: 8px">{{ text.stop }}</Button>
+          </Popconfirm>
           <Button size="small" @click="() => retryTask((record as any).id)">{{ text.retry }}</Button>
           <Popconfirm
             title="确定删除该任务？"
@@ -244,6 +304,7 @@ watch(autoRefresh, () => {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .auto-refresh {
   display: inline-flex;

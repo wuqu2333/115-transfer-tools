@@ -278,6 +278,11 @@ export function pendingTask(): TaskRow | undefined {
   return row as TaskRow | undefined;
 }
 
+export function hasRunningTask(): boolean {
+  const row = db.prepare("SELECT id FROM transfer_tasks WHERE status='running' LIMIT 1").get();
+  return !!row;
+}
+
 export function deleteTask(id: number) {
   db.prepare('DELETE FROM transfer_tasks WHERE id=?').run(id);
 }

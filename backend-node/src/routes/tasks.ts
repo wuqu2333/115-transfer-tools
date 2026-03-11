@@ -6,6 +6,25 @@ import { ok, fail } from "../helpers";
 
 export const router = Router();
 
+function stopTaskInternal(id: number) {
+  const task = getTask(id);
+  if (!task) throw new Error("task not found");
+  if (task.status === "success" || task.status === "failed" || task.status === "stopped") {
+    return task;
+  }
+  const now = new Date().toISOString();
+  const patch: any = {
+    status: "stopped",
+    updated_at: now,
+    message: "任务已终止",
+    error_message: "任务已终止",
+  };
+  if (task.status !== "running") patch.finished_at = now;
+  updateTask(id, patch);
+  appendLog(id, "任务已终止");
+  return getTask(id);
+}
+
 function toTask(row: any) {
   let logs: string[] = [];
   try {
@@ -70,6 +89,16 @@ router.post("/tasks/:id/retry", (req, res) => {
   ok(res, getTask(id));
 });
 
+router.post("/tasks/:id/stop", (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const row = stopTaskInternal(id);
+    ok(res, row);
+  } catch (e: any) {
+    fail(res, 400, e.message, e.message);
+  }
+});
+
 router.get("/tasks", (req, res) => {
   const limit = Number(req.query.limit || 100);
   ok(res, listTasks(limit).map(toTask));
@@ -93,6 +122,37 @@ router.get("/tasks/:id/export", (req, res) => {
   const resolved = path.resolve(filePath);
   if (!resolved.startsWith(exportRoot)) return fail(res, 403, "invalid export path");
   return res.download(resolved, path.basename(resolved));
+});
+
+router.post("/tasks/batch", (req, res) => {
+  const action = String(req.body?.action || "");
+  const ids: number[] = Array.isArray(req.body?.ids) ? req.body.ids.map((n: any) => Number(n)).filter((n: any) => Number.isFinite(n)) : [];
+  if (!ids.length) return fail(res, 400, "ids 不能为空");
+  if (!["stop", "delete", "retry"].includes(action)) return fail(res, 400, "不支持的 action");
+
+  const okIds: number[] = [];
+  const failed: any[] = [];
+  ids.forEach((id) => {
+    try {
+      if (action === "stop") {
+        stopTaskInternal(id);
+      } else if (action === "delete") {
+        const task = getTask(id);
+        if (!task) throw new Error("task not found");
+        deleteTask(id);
+      } else if (action === "retry") {
+        const task = getTask(id);
+        if (!task) throw new Error("task not found");
+        if (task.status === "running") throw new Error("任务运行中，不能重试");
+        updateTask(id, { status: "pending", updated_at: new Date().toISOString() } as any);
+        appendLog(id, "任务已重新排队");
+      }
+      okIds.push(id);
+    } catch (e: any) {
+      failed.push({ id, error: e?.message || String(e) });
+    }
+  });
+  ok(res, { action, ok: okIds, failed });
 });
 
 router.delete("/tasks/:id", (req, res) => {

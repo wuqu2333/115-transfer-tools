@@ -3,7 +3,7 @@ import { mkdirSync, existsSync, rmSync, createWriteStream } from "fs";
 import PQueue from "p-queue";
 import { OpenListClient } from "../clients/openlist";
 import { MobileCloudClient } from "../clients/mobile";
-import { appendLog, getSettings, pendingTask, resetRunningTasks, updateTask } from "../db";
+import { appendLog, getSettings, pendingTask, resetRunningTasks, updateTask, getTask, hasRunningTask } from "../db";
 import { FileItem, TaskRow } from "../models";
 import { logger } from "../logger";
 
@@ -105,6 +105,10 @@ export class TransferQueue {
 
   private async loop() {
     while (this.running) {
+      if (hasRunningTask()) {
+        await sleep(1000);
+        continue;
+      }
       const task = pendingTask();
       if (!task) {
         await sleep(1000);
@@ -120,6 +124,8 @@ export class TransferQueue {
   }
 
   private markFailed(taskId: number, message: string) {
+    const current = getTask(taskId);
+    if (current?.status === "stopped") return;
     updateTask(taskId, {
       status: "failed",
       error_message: message,
@@ -127,6 +133,23 @@ export class TransferQueue {
       updated_at: new Date().toISOString(),
     } as any);
     appendLog(taskId, `失败：${message}`);
+  }
+
+  private markStopped(taskId: number, message = "任务已终止") {
+    updateTask(taskId, {
+      status: "stopped",
+      error_message: message,
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      current_item: "",
+      message,
+    } as any);
+    appendLog(taskId, message);
+  }
+
+  private isStopped(taskId: number): boolean {
+    const current = getTask(taskId);
+    return !!current && current.status === "stopped";
   }
 
   private async executeTask(task: TaskRow) {
@@ -145,8 +168,23 @@ export class TransferQueue {
     } as any);
     appendLog(task.id, "任务开始");
 
+    let stopFlag = false;
+    const checkStop = () => {
+      if (stopFlag) return true;
+      if (this.isStopped(task.id)) {
+        stopFlag = true;
+        appendLog(task.id, "检测到终止请求，正在停止...");
+        return true;
+      }
+      return false;
+    };
+
     if (task.provider === "rapid_mobile") {
       await this.executeRapidTask(task, settings);
+      return;
+    }
+    if (checkStop()) {
+      this.markStopped(task.id);
       return;
     }
     if (task.provider === "mobile_export") {
@@ -172,6 +210,10 @@ export class TransferQueue {
 
     const allFiles: FileItem[] = [];
     for (const src of sourcePaths) {
+      if (checkStop()) {
+        this.markStopped(task.id);
+        return;
+      }
       appendLog(task.id, `解析源路径：${src}`);
       const obj = await openlist.get(src);
       if (!obj) throw new Error(`source unavailable: ${src}`);
@@ -238,7 +280,12 @@ export class TransferQueue {
 
     for (let idx = 0; idx < allFiles.length; idx++) {
       const file = allFiles[idx];
+      if (checkStop()) {
+        stopFlag = true;
+        break;
+      }
       queue.add(async () => {
+        if (checkStop()) return;
         const localPath = join(localRoot, file.relative_path);
         mkdirSync(dirname(localPath), { recursive: true });
         updateTask(task.id, { current_item: file.remote_path } as any);
@@ -305,6 +352,11 @@ export class TransferQueue {
     } catch (e: any) {
       this.markFailed(task.id, e?.message || String(e));
       throw e;
+    }
+
+    if (stopFlag || checkStop()) {
+      this.markStopped(task.id);
+      return;
     }
 
     updateTask(task.id, {
@@ -405,6 +457,20 @@ export class TransferQueue {
   private async executeRapidTask(task: TaskRow, settings: any) {
     if (!settings.mobile_authorization || !settings.mobile_uni) {
       throw new Error("缺少移动云盘 Authorization/UNI");
+    }
+    let stopFlag = false;
+    const checkStop = () => {
+      if (stopFlag) return true;
+      if (this.isStopped(task.id)) {
+        stopFlag = true;
+        appendLog(task.id, "检测到终止请求，正在停止...");
+        return true;
+      }
+      return false;
+    };
+    if (checkStop()) {
+      this.markStopped(task.id);
+      return;
     }
     let payload: any = {};
     try {
@@ -528,6 +594,7 @@ export class TransferQueue {
 
     items.forEach((it, idx) => {
       queue.add(async () => {
+        if (checkStop()) return;
         const parentId = (it.parent_file_id || baseParent).trim() || baseParent;
         const baseName = it.base_name || it.name;
         const relativeDir = keepDirs ? it.relative_dir || "" : "";
@@ -572,6 +639,11 @@ export class TransferQueue {
 
     await queue.onIdle();
 
+    if (stopFlag || checkStop()) {
+      this.markStopped(task.id);
+      return;
+    }
+
     const summary = `成功 ${okCount}，重命名失败 ${renameFail}，未命中 ${missCount}，失败 ${failCount}`;
     const hasIssue = renameFail + missCount + failCount > 0;
     updateTask(task.id, {
@@ -588,6 +660,20 @@ export class TransferQueue {
   private async executeMobileExportTask(task: TaskRow, settings: any) {
     if (!settings.mobile_authorization || !settings.mobile_uni) {
       throw new Error("缺少移动云盘 Authorization/UNI");
+    }
+    let stopFlag = false;
+    const checkStop = () => {
+      if (stopFlag) return true;
+      if (this.isStopped(task.id)) {
+        stopFlag = true;
+        appendLog(task.id, "检测到终止请求，正在停止...");
+        return true;
+      }
+      return false;
+    };
+    if (checkStop()) {
+      this.markStopped(task.id);
+      return;
     }
     let payload: any = {};
     try {
@@ -645,8 +731,10 @@ export class TransferQueue {
     };
 
     const walk = async (pid: string, curPrefix: string) => {
+      if (checkStop()) return;
       const list = await client.list_dir(pid);
       for (const it of list) {
+        if (checkStop()) return;
         const nextName = joinPrefix(curPrefix, it.name);
         if (it.is_dir) {
           await walk(it.file_id, nextName);
@@ -681,6 +769,15 @@ export class TransferQueue {
     };
 
     await walk(parentId, prefix);
+    if (stopFlag || checkStop()) {
+      await write("]");
+      await new Promise<void>((resolve, reject) => {
+        stream.end(() => resolve());
+        stream.on("error", reject);
+      });
+      this.markStopped(task.id);
+      return;
+    }
     await write("]");
     await new Promise<void>((resolve, reject) => {
       stream.end(() => resolve());
