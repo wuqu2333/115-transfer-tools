@@ -20,6 +20,7 @@ const text = {
   log: "日志",
   retry: "重试",
   remove: "删除",
+  download: "下载",
   removeOk: (id: number) => `任务 #${id} 已删除`,
   logTitle: "任务日志",
   logEmpty: "点击“日志”查看任务输出",
@@ -143,8 +144,22 @@ function providerLabel(provider: string) {
     sharepoint: "世纪互联",
     mobile: "移动上传",
     rapid_mobile: "移动秒传",
+    mobile_export: "移动云盘导出",
   };
   return map[provider] || provider;
+}
+
+async function downloadExport(id: number) {
+  const data: any = await request.get(`/api/tasks/${id}/export`, { responseType: "blob" });
+  const blob = data instanceof Blob ? data : new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `export_task_${id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 onMounted(loadTasks);
@@ -194,6 +209,14 @@ watch(autoRefresh, () => {
         </template>
         <template v-else-if="column.dataIndex === 'action'">
           <Button size="small" @click="() => showLog(record as any)" style="margin-right: 8px">{{ text.log }}</Button>
+          <Button
+            v-if="(record as any).provider === 'mobile_export' && (record as any).status === 'success'"
+            size="small"
+            @click="() => downloadExport((record as any).id)"
+            style="margin-right: 8px"
+          >
+            {{ text.download }}
+          </Button>
           <Button size="small" @click="() => retryTask((record as any).id)">{{ text.retry }}</Button>
           <Popconfirm
             title="确定删除该任务？"

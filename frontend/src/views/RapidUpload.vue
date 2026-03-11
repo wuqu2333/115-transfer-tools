@@ -36,6 +36,7 @@ const text = {
   exportNeedParent: "无法获取移动云盘目录（请检查 Authorization / x-yun-uni）",
   exportOk: (count: number) => `已导出 ${count} 条`,
   exportWarn: (count: number) => `已导出 ${count} 条（部分文件缺少 SHA256）`,
+  exportQueued: (id: number) => `导出任务已创建 #${id}，请到“任务记录”查看进度`,
   exportFail: "导出失败",
   pickerTitle: "选择移动云盘目录",
   pickerPath: "当前目录",
@@ -280,7 +281,12 @@ async function exportSha256() {
     const res: any = await request.post("/api/mobile/export-hash", {
       parent_file_id: parentId,
       path_prefix: exportForm.path || "/",
+      as_task: true,
     });
+    if (res?.task_id) {
+      message.success(text.exportQueued(res.task_id));
+      return;
+    }
     const items = Array.isArray(res?.items) ? res.items : [];
     const missing = Number(res?.missing_hash || 0);
     const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);

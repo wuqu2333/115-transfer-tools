@@ -20,7 +20,7 @@
 
 export interface TaskRow {
   id: number;
-  provider: 'sharepoint' | 'mobile' | 'rapid_mobile';
+  provider: 'sharepoint' | 'mobile' | 'rapid_mobile' | 'mobile_export';
   status: 'pending' | 'running' | 'success' | 'failed';
   source_paths_json: string;
   source_base_path: string;

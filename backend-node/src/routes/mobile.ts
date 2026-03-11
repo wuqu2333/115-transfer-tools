@@ -396,6 +396,38 @@ router.post("/mobile/export-hash", async (req, res) => {
     const parent = (req.body?.parent_file_id || "/").toString().trim() || "/";
     const includeMissing = req.body?.include_missing === true;
     const basePrefix = normalizePrefix(req.body?.path_prefix || "");
+    const asTask = req.body?.as_task !== false;
+
+    if (asTask) {
+      const created_at = new Date().toISOString();
+      const payload = {
+        parent_file_id: parent,
+        path_prefix: basePrefix,
+        include_missing: includeMissing,
+      };
+      const id = insertTask({
+        provider: "mobile_export" as any,
+        status: "pending",
+        source_paths_json: JSON.stringify(payload),
+        source_base_path: "",
+        target_path: "",
+        local_download_path: "",
+        total_files: 0,
+        processed_files: 0,
+        total_bytes: 0,
+        processed_bytes: 0,
+        current_item: "",
+        message: "移动云盘导出任务已入队",
+        error_message: "",
+        logs_json: "[]",
+        created_at,
+        updated_at: created_at,
+        started_at: null,
+        finished_at: null,
+      } as any);
+      appendLog(id, `导出任务已入队：parent=${parent}，prefix=${basePrefix || "/"}，includeMissing=${includeMissing}`);
+      return ok(res, { task_id: id });
+    }
 
     const client = new MobileCloudClient(
       settings.mobile_authorization,

@@ -1,6 +1,5 @@
 ﻿import { Router } from "express";
-import path from "path";
-import { getSettings, insertTask, listTasks, getTask, updateTask, appendLog, deleteTask } from "../db";
+import path from "path";`r`nimport { existsSync } from "fs";`r`nimport { getSettings, insertTask, listTasks, getTask, updateTask, appendLog, deleteTask } from "../db";
 import { ok, fail } from "../helpers";
 
 export const router = Router();
@@ -81,6 +80,19 @@ router.get("/tasks/:id", (req, res) => {
   ok(res, toTask(task));
 });
 
+router.get("/tasks/:id/export", (req, res) => {
+  const id = Number(req.params.id);
+  const task = getTask(id);
+  if (!task) return fail(res, 404, "task not found");
+  if (task.provider !== "mobile_export") return fail(res, 400, "not export task");
+  const filePath = String(task.local_download_path || "");
+  if (!filePath || !existsSync(filePath)) return fail(res, 404, "export file not found");
+  const exportRoot = path.resolve(process.cwd(), "..", "data", "exports");
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(exportRoot)) return fail(res, 403, "invalid export path");
+  return res.download(resolved, path.basename(resolved));
+});
+
 router.delete("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
   const task = getTask(id);
@@ -88,4 +100,5 @@ router.delete("/tasks/:id", (req, res) => {
   deleteTask(id);
   ok(res, { id });
 });
+
 
