@@ -1,5 +1,7 @@
 ﻿import { Router } from "express";
-import path from "path";`r`nimport { existsSync } from "fs";`r`nimport { getSettings, insertTask, listTasks, getTask, updateTask, appendLog, deleteTask } from "../db";
+import path from "path";
+import { existsSync } from "fs";
+import { getSettings, insertTask, listTasks, getTask, updateTask, appendLog, deleteTask } from "../db";
 import { ok, fail } from "../helpers";
 
 export const router = Router();
@@ -100,5 +102,6 @@ router.delete("/tasks/:id", (req, res) => {
   deleteTask(id);
   ok(res, { id });
 });
+
 
 
