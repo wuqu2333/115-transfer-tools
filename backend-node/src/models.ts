@@ -43,4 +43,5 @@ export interface TaskRow {
 export interface FileItem {
   remote_path: string;
   relative_path: string;
+  size?: number;
 }

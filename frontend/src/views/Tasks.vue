@@ -57,6 +57,35 @@ const activeTaskId = ref<number | null>(null);
 const autoRefresh = ref(true);
 let refreshTimer: number | undefined;
 
+function formatBytes(bytes: number) {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let idx = 0;
+  let n = bytes;
+  while (n >= 1024 && idx < units.length - 1) {
+    n /= 1024;
+    idx += 1;
+  }
+  const num = n >= 10 || idx === 0 ? n.toFixed(0) : n.toFixed(1);
+  return `${num}${units[idx]}`;
+}
+
+function buildProgress(t: any) {
+  const totalFiles = Number(t.total_files || 0);
+  const doneFiles = Number(t.processed_files || 0);
+  const filePercent = totalFiles > 0 ? Math.min(100, Math.round((doneFiles / totalFiles) * 100)) : 0;
+  let text = totalFiles > 0 ? `${doneFiles}/${totalFiles}（${filePercent}%）` : `${doneFiles}/-`;
+  const totalBytes = Number(t.total_bytes || 0);
+  const doneBytes = Number(t.processed_bytes || 0);
+  if (totalBytes > 0) {
+    const bPercent = Math.min(100, Math.round((doneBytes / totalBytes) * 100));
+    const left = formatBytes(doneBytes);
+    const right = formatBytes(totalBytes);
+    text += ` · ${left}/${right}（${bPercent}%）`;
+  }
+  return text;
+}
+
 async function loadTasks() {
   loading.value = true;
   try {
@@ -67,7 +96,7 @@ async function loadTasks() {
       id: t.id,
       provider: t.provider,
       status: t.status,
-      progress: t.total_files > 0 ? `${t.processed_files}/${t.total_files}` : `${t.processed_files}/-`,
+      progress: buildProgress(t),
       current_item: t.current_item,
       message: t.message,
       created_at: t.created_at,

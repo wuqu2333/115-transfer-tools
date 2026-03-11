@@ -188,7 +188,7 @@ router.post("/mobile/rapid-upload", async (req, res) => {
         total_bytes: totalBytes,
         processed_bytes: 0,
         current_item: "",
-        message: "Rapid task queued",
+        message: "秒传任务已入队",
         error_message: "",
         logs_json: "[]",
         created_at,
@@ -198,7 +198,7 @@ router.post("/mobile/rapid-upload", async (req, res) => {
       } as any);
       appendLog(
         id,
-        `Rapid task queued: items=${items.length}, concurrency=${concurrency}, retry=${retryCount}, keepDirs=${keepDirs}`,
+        `秒传任务已入队：数量=${items.length}，并发=${concurrency}，重试=${retryCount}，保留目录=${keepDirs}`,
       );
       return ok(res, { task_id: id });
     }

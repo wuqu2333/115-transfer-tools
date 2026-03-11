@@ -65,7 +65,7 @@ router.post("/tasks/:id/retry", (req, res) => {
   if (!task) return fail(res, 404, "task not found");
   if (task.status === "running") return fail(res, 400, "任务运行中，不能重试");
   updateTask(id, { status: "pending", updated_at: new Date().toISOString() } as any);
-  appendLog(id, "Task retried");
+  appendLog(id, "任务已重新排队");
   ok(res, getTask(id));
 });
 

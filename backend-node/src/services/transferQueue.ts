@@ -15,6 +15,23 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function percent(done: number, total: number) {
+  if (!total || total <= 0) return 0;
+  return Math.min(100, Math.round((done / total) * 100));
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes || bytes <= 0) return "0B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let idx = 0;
+  let n = bytes;
+  while (n >= 1024 && idx < units.length - 1) {
+    n /= 1024;
+    idx += 1;
+  }
+  return `${n.toFixed(n >= 10 || idx === 0 ? 0 : 1)}${units[idx]}`;
+}
+
 type RapidItem = {
   name: string;
   size: number;
@@ -65,7 +82,7 @@ export class TransferQueue {
       finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any);
-    appendLog(taskId, `Failed: ${message}`);
+    appendLog(taskId, `失败：${message}`);
   }
 
   private async executeTask(task: TaskRow) {
@@ -75,14 +92,14 @@ export class TransferQueue {
       started_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       logs_json: "[]",
-      message: "Task started",
+      message: "任务开始",
       error_message: "",
       processed_files: 0,
       processed_bytes: 0,
       total_bytes: 0,
       current_item: "",
     } as any);
-    appendLog(task.id, "Task started");
+    appendLog(task.id, "任务开始");
 
     if (task.provider === "rapid_mobile") {
       await this.executeRapidTask(task, settings);
@@ -107,12 +124,13 @@ export class TransferQueue {
 
     const allFiles: FileItem[] = [];
     for (const src of sourcePaths) {
-      appendLog(task.id, `Resolving source: ${src}`);
+      appendLog(task.id, `解析源路径：${src}`);
       const obj = await openlist.get(src);
       if (!obj) throw new Error(`source unavailable: ${src}`);
       if (!obj.is_dir) {
         const name = src.split("/").filter(Boolean).pop() || "file";
-        allFiles.push({ remote_path: src, relative_path: name });
+        const size = Number(obj.size ?? obj.raw_size ?? obj.length ?? 0);
+        allFiles.push({ remote_path: src, relative_path: name, size });
       } else {
         const rootName = src === "/" ? "" : src.split("/").filter(Boolean).pop() || "";
         const prefix = rootName ? rootName : "";
@@ -120,13 +138,24 @@ export class TransferQueue {
       }
     }
 
-    updateTask(task.id, { total_files: allFiles.length, updated_at: new Date().toISOString() } as any);
-    appendLog(task.id, `Collected files: ${allFiles.length}`);
+    const totalBytes = allFiles.reduce((sum, f) => sum + Number(f.size || 0), 0);
+    updateTask(task.id, {
+      total_files: allFiles.length,
+      total_bytes: totalBytes,
+      updated_at: new Date().toISOString(),
+    } as any);
+    appendLog(
+      task.id,
+      `已收集文件：${allFiles.length}，总大小：${formatBytes(totalBytes)}`,
+    );
 
     const localRoot = task.local_download_path || settings.download_base_path;
     if (!localRoot) throw new Error("缺少本地下载目录");
     mkdirSync(localRoot, { recursive: true });
-    appendLog(task.id, `Download policy: concurrency capped at ${DOWNLOAD_CONCURRENCY}, start interval 2s, auto retry on 115 403`);
+    appendLog(
+      task.id,
+      `下载策略：并发 ${DOWNLOAD_CONCURRENCY}，启动间隔 2s，115 403 自动重试`,
+    );
 
     const dirCache: Record<string, string> = {};
     if (task.provider === "mobile") dirCache[""] = settings.mobile_parent_file_id;
@@ -143,11 +172,15 @@ export class TransferQueue {
         updateTask(task.id, { current_item: file.remote_path } as any);
 
         const size = await this.downloadWithRetry(openlist, file.remote_path, localPath, task.id);
+        const downloadPct = percent(idx + 1, allFiles.length);
+        appendLog(task.id, `下载完成 [${idx + 1}/${allFiles.length}，${downloadPct}%]：${file.remote_path}`);
 
         if (task.provider === "sharepoint") {
           const target = this.joinRemote(task.target_path, file.relative_path);
-          appendLog(task.id, `[${idx + 1}/${allFiles.length}] upload to sharepoint: ${target}`);
+          appendLog(task.id, `上传到世纪互联：${target}`);
           await openlist.upload(localPath, target);
+          const uploadPct = percent(idx + 1, allFiles.length);
+          appendLog(task.id, `上传完成 [${idx + 1}/${allFiles.length}，${uploadPct}%]：${target}`);
         } else if (task.provider === "mobile" && mobile) {
           await this.uploadToMobile({
             task,
@@ -167,8 +200,8 @@ export class TransferQueue {
         updateTask(task.id, {
           processed_files: processedFiles,
           processed_bytes: processedBytes,
-          total_bytes: (task.total_bytes || 0) + processedBytes,
           updated_at: new Date().toISOString(),
+          message: `进行中 ${processedFiles}/${allFiles.length}（${percent(processedFiles, allFiles.length)}%）`,
         } as any);
       });
 
@@ -190,7 +223,7 @@ export class TransferQueue {
       updated_at: new Date().toISOString(),
       current_item: "",
     } as any);
-    appendLog(task.id, "Task completed");
+    appendLog(task.id, "任务完成");
 
     if (settings.clean_local_after_transfer && existsSync(localRoot)) {
       try {
@@ -211,7 +244,7 @@ export class TransferQueue {
         const status = err?.response?.status;
         const msg: string = err?.message || "";
         if (status === 403 || msg.includes("403")) {
-          appendLog(taskId, `115 403, retry ${attempt}/${DOWNLOAD_RETRY}`);
+          appendLog(taskId, `115 403，重试 ${attempt}/${DOWNLOAD_RETRY}`);
           await sleep(1500 * attempt);
           continue;
         }
@@ -246,24 +279,24 @@ export class TransferQueue {
     const existsOriginal = await this.existsInOpenlist(openlist, targetOpenlistDir, originalName);
     const existsFake = await this.existsInOpenlist(openlist, targetOpenlistDir, fakeName);
     if (existsOriginal || existsFake) {
-      appendLog(task.id, `Skip upload: target already has file ${originalName} or ${fakeName} in ${targetOpenlistDir}`);
+      appendLog(task.id, `跳过上传：目标目录已存在 ${originalName} 或 ${fakeName}（${targetOpenlistDir}）`);
       if (settings.clean_local_after_transfer && fs.existsSync(localPath)) fs.unlinkSync(localPath);
       return;
     }
 
     const fakePath = join(dirname(localPath), fakeName);
     fs.renameSync(localPath, fakePath);
-    appendLog(task.id, `Mobile upload: rename suffix ${originalName} -> ${fakeName}`);
+    appendLog(task.id, `移动上传：改后缀 ${originalName} -> ${fakeName}`);
 
     const targetParent = await this.ensureMobileDir(mobile, settings.mobile_parent_file_id, relativeParent, dirCache);
     const res = await mobile.upload_file(fakePath, targetParent);
-    appendLog(task.id, `[${index + 1}/${total}] Mobile upload success: file_id=${res.file_id}`);
+    appendLog(task.id, `移动上传完成 [${index + 1}/${total}，${percent(index + 1, total)}%] file_id=${res.file_id}`);
 
     const renamed = await this.ensureMobileRename(mobile, targetParent, res.file_id, originalName, 5);
     if (renamed) {
-      appendLog(task.id, `Mobile rename OK: ${originalName} (file_id=${res.file_id})`);
+      appendLog(task.id, `移动重命名成功：${originalName} (file_id=${res.file_id})`);
     } else {
-      appendLog(task.id, `Mobile rename failed: ${originalName} (file_id=${res.file_id})`);
+      appendLog(task.id, `移动重命名失败：${originalName} (file_id=${res.file_id})`);
     }
 
     if (settings.clean_local_after_transfer && fs.existsSync(fakePath)) fs.unlinkSync(fakePath);
@@ -317,7 +350,7 @@ export class TransferQueue {
     } as any);
     appendLog(
       task.id,
-      `Rapid task start: items=${items.length}, concurrency=${concurrency}, retry=${retryCount}, keepDirs=${keepDirs}`,
+      `秒传任务开始：数量=${items.length}，并发=${concurrency}，重试=${retryCount}，保留目录=${keepDirs}`,
     );
 
     const mobile = new MobileCloudClient(
@@ -354,7 +387,7 @@ export class TransferQueue {
           lastErr = e;
           const msg = e?.message || String(e);
           if (!shouldRetryRapid(msg) || attempt >= retryCount) throw e;
-          appendLog(task.id, `Rapid retry ${attempt}/${retryCount} failed: ${msg}`);
+          appendLog(task.id, `秒传重试 ${attempt}/${retryCount} 失败：${msg}`);
           await sleep(400 * attempt);
         }
       }
@@ -414,16 +447,16 @@ export class TransferQueue {
           const renamed = await this.ensureMobileRename(mobile, targetParent, resu.file_id, baseName, 5);
           if (renamed) {
             okCount += 1;
-            appendLog(task.id, `Mobile rename OK: ${baseName} (file_id=${resu.file_id})`);
+            appendLog(task.id, `移动重命名成功：${baseName} (file_id=${resu.file_id})`);
           } else {
             renameFail += 1;
-            appendLog(task.id, `Mobile rename failed: ${baseName} (file_id=${resu.file_id})`);
+            appendLog(task.id, `移动重命名失败：${baseName} (file_id=${resu.file_id})`);
           }
         } catch (err: any) {
           const msg = err?.message || String(err);
           if (msg.includes("秒传未命中")) missCount += 1;
           else failCount += 1;
-          appendLog(task.id, `Rapid failed: ${it.name} -> ${msg}`);
+          appendLog(task.id, `秒传失败：${it.name} -> ${msg}`);
         } finally {
           processedFiles += 1;
           processedBytes += Number(it.size || 0);
@@ -431,6 +464,7 @@ export class TransferQueue {
             processed_files: processedFiles,
             processed_bytes: processedBytes,
             updated_at: new Date().toISOString(),
+            message: `秒传中 ${processedFiles}/${items.length}（${percent(processedFiles, items.length)}%）`,
           } as any);
         }
       });
@@ -438,7 +472,7 @@ export class TransferQueue {
 
     await queue.onIdle();
 
-    const summary = `OK ${okCount}, RENAME_FAIL ${renameFail}, MISS ${missCount}, FAIL ${failCount}`;
+    const summary = `成功 ${okCount}，重命名失败 ${renameFail}，未命中 ${missCount}，失败 ${failCount}`;
     const hasIssue = renameFail + missCount + failCount > 0;
     updateTask(task.id, {
       status: hasIssue ? "failed" : "success",
@@ -448,7 +482,7 @@ export class TransferQueue {
       message: summary,
       error_message: hasIssue ? summary : "",
     } as any);
-    appendLog(task.id, `Rapid task completed: ${summary}`);
+    appendLog(task.id, `秒传任务完成：${summary}`);
   }
 
   private async existsInOpenlist(openlist: OpenListClient, dir: string, name: string) {
@@ -511,7 +545,7 @@ export class TransferQueue {
         const targetPath = this.joinRemote(targetDir, name);
         try {
           await openlist.rename(targetPath, newName);
-          appendLog(taskId, `OpenList rename success: ${targetPath} -> ${newName}`);
+          appendLog(taskId, `OpenList 重命名成功：${targetPath} -> ${newName}`);
           return;
         } catch (e: any) {
           lastErr = e;
@@ -521,21 +555,18 @@ export class TransferQueue {
       try {
         const data = await openlist.list(targetDir, true, 1, 0);
         const content = data.content || [];
-        const found = content.find((it: any) => it && names.includes(it.name));
-        if (found?.name) {
-          const targetPath = this.joinRemote(targetDir, found.name);
-          await openlist.rename(targetPath, newName);
-          appendLog(taskId, `OpenList rename success: ${targetPath} -> ${newName}`);
-          return;
+          const found = content.find((it: any) => it && names.includes(it.name));
+          if (found?.name) {
+            const targetPath = this.joinRemote(targetDir, found.name);
+            await openlist.rename(targetPath, newName);
+            appendLog(taskId, `OpenList 重命名成功：${targetPath} -> ${newName}`);
+            return;
+          }
+        } catch (e: any) {
+          lastErr = e;
         }
-      } catch (e: any) {
-        lastErr = e;
-      }
 
-      appendLog(
-        taskId,
-        `OpenList rename retry ${attempt}/${maxAttempts} failed: ${lastErr?.message || String(lastErr)}`,
-      );
+      appendLog(taskId, `OpenList 重命名重试 ${attempt}/${maxAttempts} 失败：${lastErr?.message || String(lastErr)}`);
       const delay = (delayBaseMs || 1200) * attempt;
       await sleep(delay);
     }
@@ -553,7 +584,8 @@ export class TransferQueue {
       if (item.is_dir) {
         await this.walkDir(openlist, childPath, rel, out);
       } else {
-        out.push({ remote_path: childPath, relative_path: rel });
+        const size = Number(item.size ?? item.raw_size ?? item.length ?? 0);
+        out.push({ remote_path: childPath, relative_path: rel, size });
       }
     }
   }
