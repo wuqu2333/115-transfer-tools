@@ -80,8 +80,13 @@ export class OpenListClient {
 
   normalize(p: string) {
     if (!p) return '/';
-    if (!p.startsWith('/')) return '/' + p;
-    return p;
+    let s = String(p).trim();
+    if (!s) return '/';
+    s = s.replace(/\\/g, '/');
+    if (!s.startsWith('/')) s = '/' + s;
+    s = s.replace(/\/+/g, '/');
+    if (s.length > 1) s = s.replace(/\/+$/, '');
+    return s;
   }
 
   async download(remote_path: string, local_path: string): Promise<number> {

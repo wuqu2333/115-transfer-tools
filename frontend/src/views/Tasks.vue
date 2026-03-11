@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { request } from '../api/request';
-import { Button, Card, Table, Tag, message } from 'ant-design-vue';
+import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { request } from "../api/request";
+import { Button, Card, Table, Tag, message, Popconfirm, Switch } from "ant-design-vue";
 
 interface TaskRow {
   id: number;
@@ -14,28 +14,53 @@ interface TaskRow {
   logs: string[];
 }
 
+const text = {
+  title: "任务记录",
+  refresh: "刷新",
+  log: "日志",
+  retry: "重试",
+  remove: "删除",
+  removeOk: (id: number) => `任务 #${id} 已删除`,
+  logTitle: "任务日志",
+  logEmpty: "点击“日志”查看任务输出",
+  retryOk: (id: number) => `任务 #${id} 已重试`,
+  autoRefresh: "实时更新",
+  columns: {
+    target: "目标",
+    status: "状态",
+    progress: "进度",
+    current: "当前项",
+    message: "消息",
+    created: "创建时间",
+    action: "操作",
+  },
+};
+
 const columns = [
-  { title: 'ID', dataIndex: 'id', width: 70 },
-  { title: '目标', dataIndex: 'provider' },
-  { title: '状态', dataIndex: 'status' },
-  { title: '进度', dataIndex: 'progress' },
-  { title: '当前项', dataIndex: 'current_item' },
-  { title: '消息', dataIndex: 'message' },
-  { title: '创建时间', dataIndex: 'created_at' },
+  { title: "ID", dataIndex: "id", width: 70 },
+  { title: text.columns.target, dataIndex: "provider" },
+  { title: text.columns.status, dataIndex: "status" },
+  { title: text.columns.progress, dataIndex: "progress" },
+  { title: text.columns.current, dataIndex: "current_item" },
+  { title: text.columns.message, dataIndex: "message" },
+  { title: text.columns.created, dataIndex: "created_at" },
   {
-    title: '操作',
-    dataIndex: 'action',
+    title: text.columns.action,
+    dataIndex: "action",
   },
 ];
 
 const dataSource = ref<TaskRow[]>([]);
 const loading = ref(false);
 const activeLog = ref<string[]>([]);
+const activeTaskId = ref<number | null>(null);
+const autoRefresh = ref(true);
+let refreshTimer: number | undefined;
 
 async function loadTasks() {
   loading.value = true;
   try {
-    const res = (await request.get<any[]>('/api/tasks?limit=120')) as any;
+    const res = (await request.get<any[]>("/api/tasks?limit=120")) as any;
     const arr: any[] = Array.isArray(res) ? res : [];
     dataSource.value = arr.map((t: any) => ({
       key: t.id,
@@ -48,6 +73,14 @@ async function loadTasks() {
       created_at: t.created_at,
       logs: t.logs || [],
     }));
+    if (activeTaskId.value != null) {
+      const found = dataSource.value.find((t) => t.id === activeTaskId.value);
+      if (found) activeLog.value = found.logs || [];
+      else {
+        activeTaskId.value = null;
+        activeLog.value = [];
+      }
+    }
   } finally {
     loading.value = false;
   }
@@ -55,43 +88,100 @@ async function loadTasks() {
 
 async function retryTask(id: number) {
   await request.post(`/api/tasks/${id}/retry`);
-  message.success(`任务 #${id} 已重试`);
+  message.success(text.retryOk(id));
   loadTasks();
+}
+
+async function deleteTask(id: number) {
+  await request.delete(`/api/tasks/${id}`);
+  message.success(text.removeOk(id));
+  loadTasks();
+  if (activeLog.value.length) activeLog.value = [];
 }
 
 function showLog(record: TaskRow) {
   activeLog.value = record.logs || [];
+  activeTaskId.value = record.id;
 }
 
 function statusTag(status: string) {
-  const map: Record<string, string> = { success: 'green', failed: 'red', running: 'blue', pending: 'default' };
-  return map[status] || 'default';
+  const map: Record<string, string> = { success: "green", failed: "red", running: "blue", pending: "default" };
+  return map[status] || "default";
+}
+
+function providerLabel(provider: string) {
+  const map: Record<string, string> = {
+    sharepoint: "世纪互联",
+    mobile: "移动上传",
+    rapid_mobile: "移动秒传",
+  };
+  return map[provider] || provider;
 }
 
 onMounted(loadTasks);
+onMounted(() => {
+  startAutoRefresh();
+});
+onBeforeUnmount(() => {
+  stopAutoRefresh();
+});
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  if (!autoRefresh.value) return;
+  refreshTimer = window.setInterval(() => {
+    loadTasks();
+  }, 2000);
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) {
+    window.clearInterval(refreshTimer);
+    refreshTimer = undefined;
+  }
+}
+
+watch(autoRefresh, () => {
+  startAutoRefresh();
+});
 </script>
 
 <template>
-  <Card title="任务记录" :bordered="false">
+  <Card :title="text.title" :bordered="false">
     <div class="list-actions">
-      <Button @click="loadTasks">刷新</Button>
+      <Button @click="loadTasks">{{ text.refresh }}</Button>
+      <div class="auto-refresh">
+        <span>{{ text.autoRefresh }}</span>
+        <Switch v-model:checked="autoRefresh" />
+      </div>
     </div>
     <Table :columns="columns" :data-source="dataSource" :loading="loading" size="small" row-key="id">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'status'">
           <Tag :color="statusTag((record as any).status)">{{ (record as any).status }}</Tag>
         </template>
+        <template v-else-if="column.dataIndex === 'provider'">
+          {{ providerLabel((record as any).provider) }}
+        </template>
         <template v-else-if="column.dataIndex === 'action'">
-          <Button size="small" @click="() => showLog(record as any)" style="margin-right: 8px">日志</Button>
-          <Button size="small" @click="() => retryTask((record as any).id)">重试</Button>
+          <Button size="small" @click="() => showLog(record as any)" style="margin-right: 8px">{{ text.log }}</Button>
+          <Button size="small" @click="() => retryTask((record as any).id)">{{ text.retry }}</Button>
+          <Popconfirm
+            title="确定删除该任务？"
+            ok-text="删除"
+            cancel-text="取消"
+            @confirm="() => deleteTask((record as any).id)"
+          >
+            <Button size="small" danger style="margin-left: 8px">{{ text.remove }}</Button>
+          </Popconfirm>
         </template>
         <template v-else>
           {{ (record as any)[column.dataIndex as string] }}
         </template>
       </template>
     </Table>
-    <Card style="margin-top: 12px" size="small" title="任务日志">
-      <pre class="log-view">{{ activeLog.join('\n') || '点击“日志”查看任务输出' }}</pre>
+    <Card style="margin-top: 12px" size="small" :title="text.logTitle">
+      <pre class="log-view">{{ activeLog.join("\n") || text.logEmpty }}</pre>
     </Card>
   </Card>
 </template>
@@ -101,14 +191,23 @@ onMounted(loadTasks);
   margin-bottom: 10px;
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+.auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
 }
 .log-view {
   max-height: 280px;
   overflow: auto;
   white-space: pre-wrap;
-  background: #0c1220;
-  color: #e2e8f0;
+  background: #f7f5f0;
+  color: var(--text);
   padding: 10px;
   border-radius: 10px;
+  border: 1px solid var(--border);
 }
 </style>
+

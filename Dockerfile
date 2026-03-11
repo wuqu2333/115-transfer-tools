@@ -1,18 +1,27 @@
-FROM python:3.12-slim
+FROM node:20-bookworm AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --silent
+COPY frontend/ ./
+RUN npm run build
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+FROM node:20-bookworm AS backend-build
+WORKDIR /app/backend-node
+COPY backend-node/package.json backend-node/package-lock.json ./
+RUN npm ci --silent
+COPY backend-node/ ./
+RUN npm run build
+RUN npm prune --omit=dev
 
-WORKDIR /app
-
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-COPY app /app/app
-
+FROM node:20-bookworm-slim
+WORKDIR /app/backend-node
+ENV NODE_ENV=production
+ENV STATIC_DIR=/app/frontend/dist
+COPY --from=backend-build /app/backend-node/dist ./dist
+COPY --from=backend-build /app/backend-node/node_modules ./node_modules
+COPY --from=backend-build /app/backend-node/package.json ./package.json
+COPY --from=backend-build /app/backend-node/package-lock.json ./package-lock.json
+COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 RUN mkdir -p /app/data /app/downloads
-
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["node", "dist/server.js"]

@@ -2,11 +2,14 @@
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
+import { existsSync } from 'fs';
 import { router as settingsRouter } from './routes/settings';
 import { router as openlistRouter } from './routes/openlist';
 import { router as mobileRouter } from './routes/mobile';
 import { router as tasksRouter } from './routes/tasks';
 import { router as healthRouter } from './routes/health';
+import { router as systemRouter } from './routes/system';
+import { router as uiRouter } from './routes/ui';
 import { TransferQueue } from './services/transferQueue';
 import { logger } from './logger';
 
@@ -14,7 +17,10 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 
-const STATIC_DIR = process.env.STATIC_DIR || path.join(process.cwd(), '..', 'app', 'static');
+const envStaticDir = process.env.STATIC_DIR;
+const defaultStaticDir = path.join(process.cwd(), '..', 'frontend', 'dist');
+const legacyStaticDir = path.join(process.cwd(), '..', 'app', 'static');
+const STATIC_DIR = envStaticDir || (existsSync(defaultStaticDir) ? defaultStaticDir : legacyStaticDir);
 const assetsPath = path.join(STATIC_DIR, 'assets');
 
 app.use('/api', settingsRouter);
@@ -22,11 +28,30 @@ app.use('/api', openlistRouter);
 app.use('/api', mobileRouter);
 app.use('/api', tasksRouter);
 app.use('/api', healthRouter);
+app.use('/api', systemRouter);
+app.use('/api', uiRouter);
 
 // 静态资源
-app.use('/assets', express.static(assetsPath));
-app.get('/vite.svg', (_, res) => res.sendFile(path.join(STATIC_DIR, 'vite.svg')));
-app.use('/', express.static(STATIC_DIR));
+if (!existsSync(STATIC_DIR)) {
+  logger.warn(`Static directory not found: ${STATIC_DIR}`);
+}
+if (existsSync(assetsPath)) {
+  app.use('/assets', express.static(assetsPath));
+}
+app.get('/vite.svg', (_, res) => {
+  const vitePath = path.join(STATIC_DIR, 'vite.svg');
+  if (existsSync(vitePath)) return res.sendFile(vitePath);
+  return res.status(404).end();
+});
+if (existsSync(STATIC_DIR)) {
+  app.use('/', express.static(STATIC_DIR));
+}
+app.get(/.*/, (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  const indexPath = path.join(STATIC_DIR, 'index.html');
+  if (existsSync(indexPath)) return res.sendFile(indexPath);
+  return res.status(404).end();
+});
 
 const port = Number(process.env.PORT || 8000);
 app.listen(port, () => {

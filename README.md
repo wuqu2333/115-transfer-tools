@@ -6,7 +6,7 @@
 - 115 → 移动云盘：下载后改伪后缀（默认 .jpg）走 APP 上传接口，上传完成后通过 OpenList 重命名回原始文件名。
 - 任务、日志与进度保存到 SQLite。
 
-前端已重构为 Vue3 + Vite + Ant Design Vue，后端仍为 FastAPI，静态文件由 `app/static` 提供。
+前端已重构为 Vue3 + Vite + Ant Design Vue，后端为 Express + TypeScript + better-sqlite3，静态文件由 `frontend/dist` 提供。
 
 ## 目录
 - [快速启动（后端）](#快速启动后端)
@@ -18,13 +18,12 @@
 
 ## 快速启动（后端）
 ```powershell
-cd D:\Media-tools
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd D:\Media-tools\backend-node
+npm install
+npm run build
+npm start
 ```
-打开 `http://127.0.0.1:8000` 访问控制台。
+打开 `http://127.0.0.1:8000` 访问控制台（默认会读取 `frontend/dist` 作为静态资源）。
 
 ## 前端开发/构建
 ```powershell
@@ -33,7 +32,7 @@ npm install
 npm run dev   # 本地预览（默认 http://127.0.0.1:5173）
 npm run build # 生成 dist
 ```
-构建后将 `frontend/dist` 内容复制到 `app/static/`（已用于当前版本）。后端重新启动后即可生效。
+构建后 `frontend/dist` 会被后端直接读取，无需手动复制。
 
 ## Docker 启动
 ```powershell
@@ -43,8 +42,8 @@ docker compose up -d --build
 访问 `http://127.0.0.1:8000`。
 
 ## Android/Termux 运行
-1. 安装 Termux 与 Python。
-2. 克隆项目，执行 `pip install -r requirements.txt`，然后 `uvicorn app.main:app --host 0.0.0.0 --port 8000`。
+1. 安装 Termux 与 Node.js。
+2. 克隆项目，进入 `backend-node` 目录，执行 `npm install`、`npm run build`、`npm start`。
 3. 手机浏览器访问 `http://127.0.0.1:8000`（本机）或局域网 IP。
 
 ## 关键配置说明

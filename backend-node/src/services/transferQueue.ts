@@ -1,17 +1,36 @@
-﻿import { join, dirname } from 'path';
-import { mkdirSync, existsSync, rmSync } from 'fs';
-import PQueue from 'p-queue';
-import { OpenListClient } from '../clients/openlist';
-import { MobileCloudClient } from '../clients/mobile';
-import { appendLog, getSettings, pendingTask, updateTask } from '../db';
-import { FileItem, TaskRow } from '../models';
-import { logger } from '../logger';
+﻿import { join, dirname, posix as pathPosix } from "path";
+import { mkdirSync, existsSync, rmSync } from "fs";
+import PQueue from "p-queue";
+import { OpenListClient } from "../clients/openlist";
+import { MobileCloudClient } from "../clients/mobile";
+import { appendLog, getSettings, pendingTask, updateTask } from "../db";
+import { FileItem, TaskRow } from "../models";
+import { logger } from "../logger";
 
 const DOWNLOAD_CONCURRENCY = 3;
 const DOWNLOAD_INTERVAL_MS = 2000;
+const DOWNLOAD_RETRY = 3;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+type RapidItem = {
+  name: string;
+  size: number;
+  sha256: string;
+  parent_file_id?: string;
+  base_name?: string;
+  relative_dir?: string;
+};
+
+function splitPathParts(input: string) {
+  const clean = String(input || "").replace(/\\/g, "/");
+  if (!clean) return { base: "", dir: "" };
+  const parts = clean.split("/").filter(Boolean);
+  const base = parts.length ? parts[parts.length - 1] : clean;
+  const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+  return { base, dir };
 }
 
 export class TransferQueue {
@@ -20,7 +39,7 @@ export class TransferQueue {
   start() {
     if (this.running) return;
     this.running = true;
-    this.loop();
+    void this.loop();
   }
 
   private async loop() {
@@ -34,28 +53,45 @@ export class TransferQueue {
         await this.executeTask(task as TaskRow);
       } catch (e: any) {
         logger.error(e);
+        this.markFailed(task.id, e?.message || String(e));
       }
     }
+  }
+
+  private markFailed(taskId: number, message: string) {
+    updateTask(taskId, {
+      status: "failed",
+      error_message: message,
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any);
+    appendLog(taskId, `Failed: ${message}`);
   }
 
   private async executeTask(task: TaskRow) {
     const settings = getSettings();
     updateTask(task.id, {
-      status: 'running',
+      status: "running",
       started_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      logs_json: '[]',
-      message: 'Task started',
-      error_message: '',
+      logs_json: "[]",
+      message: "Task started",
+      error_message: "",
       processed_files: 0,
       processed_bytes: 0,
       total_bytes: 0,
+      current_item: "",
     } as any);
-    appendLog(task.id, 'Task started');
+    appendLog(task.id, "Task started");
+
+    if (task.provider === "rapid_mobile") {
+      await this.executeRapidTask(task, settings);
+      return;
+    }
 
     const openlist = new OpenListClient(settings.openlist_base_url, settings.openlist_token, settings.openlist_password);
     let mobile: MobileCloudClient | null = null;
-    if (task.provider === 'mobile') {
+    if (task.provider === "mobile") {
       mobile = new MobileCloudClient(
         settings.mobile_authorization,
         settings.mobile_uni,
@@ -66,84 +102,95 @@ export class TransferQueue {
       );
     }
 
-    const sourcePaths: string[] = JSON.parse(task.source_paths_json || '[]');
+    const sourcePaths: string[] = JSON.parse(task.source_paths_json || "[]");
+    if (!sourcePaths.length) throw new Error("source_paths cannot be empty");
+
     const allFiles: FileItem[] = [];
     for (const src of sourcePaths) {
       appendLog(task.id, `Resolving source: ${src}`);
       const obj = await openlist.get(src);
-      if (!obj) throw new Error('source unavailable');
+      if (!obj) throw new Error(`source unavailable: ${src}`);
       if (!obj.is_dir) {
-        const name = src.split('/').pop() || 'file';
+        const name = src.split("/").filter(Boolean).pop() || "file";
         allFiles.push({ remote_path: src, relative_path: name });
       } else {
-        await this.walkDir(openlist, src, '', allFiles);
+        const rootName = src === "/" ? "" : src.split("/").filter(Boolean).pop() || "";
+        const prefix = rootName ? rootName : "";
+        await this.walkDir(openlist, src, prefix, allFiles);
       }
     }
 
     updateTask(task.id, { total_files: allFiles.length, updated_at: new Date().toISOString() } as any);
     appendLog(task.id, `Collected files: ${allFiles.length}`);
 
-    const localRoot = join(task.local_download_path || settings.download_base_path || '.', `task_${task.id}`);
+    const localRoot = task.local_download_path || settings.download_base_path;
+    if (!localRoot) throw new Error("缺少本地下载目录");
     mkdirSync(localRoot, { recursive: true });
+    appendLog(task.id, `Download policy: concurrency capped at ${DOWNLOAD_CONCURRENCY}, start interval 2s, auto retry on 115 403`);
 
-    const queue = new PQueue({ concurrency: DOWNLOAD_CONCURRENCY, intervalCap: DOWNLOAD_CONCURRENCY, interval: DOWNLOAD_INTERVAL_MS });
+    const dirCache: Record<string, string> = {};
+    if (task.provider === "mobile") dirCache[""] = settings.mobile_parent_file_id;
 
-    let processed = 0;
-    for (const file of allFiles) {
+    const queue = new PQueue({ concurrency: DOWNLOAD_CONCURRENCY });
+    let processedFiles = 0;
+    let processedBytes = 0;
+
+    for (let idx = 0; idx < allFiles.length; idx++) {
+      const file = allFiles[idx];
       queue.add(async () => {
         const localPath = join(localRoot, file.relative_path);
         mkdirSync(dirname(localPath), { recursive: true });
-        appendLog(task.id, `Downloading ${file.remote_path}`);
-        const size = await openlist.download(file.remote_path, localPath);
-        appendLog(task.id, `Downloaded ${file.remote_path}`);
+        updateTask(task.id, { current_item: file.remote_path } as any);
 
-        if (task.provider === 'sharepoint') {
+        const size = await this.downloadWithRetry(openlist, file.remote_path, localPath, task.id);
+
+        if (task.provider === "sharepoint") {
           const target = this.joinRemote(task.target_path, file.relative_path);
-          appendLog(task.id, `Upload to sharepoint: ${target}`);
+          appendLog(task.id, `[${idx + 1}/${allFiles.length}] upload to sharepoint: ${target}`);
           await openlist.upload(localPath, target);
-        } else if (task.provider === 'mobile' && mobile) {
-          const fakeExt = settings.mobile_fake_extension.startsWith('.')
-            ? settings.mobile_fake_extension
-            : `.${settings.mobile_fake_extension}`;
-          const originalName = localPath.split(/[/\\]/).pop() || 'file';
-          const fakeName = originalName.replace(/\.[^.]+$/, '') + fakeExt;
-          const fs = await import('fs');
-          const fakePath = join(dirname(localPath), fakeName);
-          fs.renameSync(localPath, fakePath);
-          appendLog(task.id, `Mobile upload: rename suffix ${originalName} -> ${fakeName}`);
-
-          const relativeParent = dirname(file.relative_path).replace(/\\/g, '/');
-          const targetParent = await this.ensureMobileDir(mobile, settings.mobile_parent_file_id, relativeParent);
-          const res = await mobile.upload_file(fakePath, targetParent);
-
-          const targetOpenlistDir = this.joinRemote(settings.mobile_target_openlist_path, relativeParent === '.' ? '' : relativeParent);
-          const targetFilePath = this.joinRemote(targetOpenlistDir, res.uploaded_name);
-          await openlist.rename(targetFilePath, originalName);
-          appendLog(task.id, `OpenList rename success: ${targetFilePath} -> ${originalName}`);
-
-          if (settings.clean_local_after_transfer && fs.existsSync(fakePath)) fs.unlinkSync(fakePath);
+        } else if (task.provider === "mobile" && mobile) {
+          await this.uploadToMobile({
+            task,
+            settings,
+            openlist,
+            mobile,
+            localPath,
+            fileItem: file,
+            dirCache,
+            index: idx,
+            total: allFiles.length,
+          });
         }
 
-        processed += 1;
+        processedFiles += 1;
+        processedBytes += size;
         updateTask(task.id, {
-          processed_files: processed,
-          processed_bytes: (task.processed_bytes || 0) + size,
-          total_bytes: (task.total_bytes || 0) + size,
+          processed_files: processedFiles,
+          processed_bytes: processedBytes,
+          total_bytes: (task.total_bytes || 0) + processedBytes,
           updated_at: new Date().toISOString(),
-          current_item: file.remote_path,
         } as any);
       });
+
+      if (idx < allFiles.length - 1) {
+        await sleep(DOWNLOAD_INTERVAL_MS);
+      }
     }
 
-    await queue.onIdle();
+    try {
+      await queue.onIdle();
+    } catch (e: any) {
+      this.markFailed(task.id, e?.message || String(e));
+      throw e;
+    }
 
     updateTask(task.id, {
-      status: 'success',
+      status: "success",
       finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      current_item: '',
+      current_item: "",
     } as any);
-    appendLog(task.id, 'Task completed');
+    appendLog(task.id, "Task completed");
 
     if (settings.clean_local_after_transfer && existsSync(localRoot)) {
       try {
@@ -152,6 +199,348 @@ export class TransferQueue {
         logger.warn(e);
       }
     }
+  }
+
+  private async downloadWithRetry(openlist: OpenListClient, remote: string, local: string, taskId: number) {
+    let lastErr: any;
+    for (let attempt = 1; attempt <= DOWNLOAD_RETRY; attempt++) {
+      try {
+        return await openlist.download(remote, local);
+      } catch (err: any) {
+        lastErr = err;
+        const status = err?.response?.status;
+        const msg: string = err?.message || "";
+        if (status === 403 || msg.includes("403")) {
+          appendLog(taskId, `115 403, retry ${attempt}/${DOWNLOAD_RETRY}`);
+          await sleep(1500 * attempt);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr;
+  }
+
+  private async uploadToMobile(opts: {
+    task: TaskRow;
+    settings: any;
+    openlist: OpenListClient;
+    mobile: MobileCloudClient;
+    localPath: string;
+    fileItem: FileItem;
+    dirCache: Record<string, string>;
+    index: number;
+    total: number;
+  }) {
+    const { task, settings, openlist, mobile, localPath, fileItem, dirCache, index, total } = opts;
+    const fakeExtRaw = settings.mobile_fake_extension?.trim() || ".jpg";
+    const fakeExt = fakeExtRaw.startsWith(".") ? fakeExtRaw : `.${fakeExtRaw}`;
+    const originalName = localPath.split(/[/\\]/).pop() || "file";
+    const stem = originalName.replace(/\.[^.]+$/, "");
+    const fakeName = `${stem}${fakeExt}`;
+    const fs = await import("fs");
+
+    const relativeParent = pathPosix.dirname(fileItem.relative_path) === "." ? "" : pathPosix.dirname(fileItem.relative_path);
+    const targetOpenlistDir = this.joinRemote(settings.mobile_target_openlist_path, relativeParent);
+
+    const existsOriginal = await this.existsInOpenlist(openlist, targetOpenlistDir, originalName);
+    const existsFake = await this.existsInOpenlist(openlist, targetOpenlistDir, fakeName);
+    if (existsOriginal || existsFake) {
+      appendLog(task.id, `Skip upload: target already has file ${originalName} or ${fakeName} in ${targetOpenlistDir}`);
+      if (settings.clean_local_after_transfer && fs.existsSync(localPath)) fs.unlinkSync(localPath);
+      return;
+    }
+
+    const fakePath = join(dirname(localPath), fakeName);
+    fs.renameSync(localPath, fakePath);
+    appendLog(task.id, `Mobile upload: rename suffix ${originalName} -> ${fakeName}`);
+
+    const targetParent = await this.ensureMobileDir(mobile, settings.mobile_parent_file_id, relativeParent, dirCache);
+    const res = await mobile.upload_file(fakePath, targetParent);
+    appendLog(task.id, `[${index + 1}/${total}] Mobile upload success: file_id=${res.file_id}`);
+
+    const renamed = await this.ensureMobileRename(mobile, targetParent, res.file_id, originalName, 5);
+    if (renamed) {
+      appendLog(task.id, `Mobile rename OK: ${originalName} (file_id=${res.file_id})`);
+    } else {
+      appendLog(task.id, `Mobile rename failed: ${originalName} (file_id=${res.file_id})`);
+    }
+
+    if (settings.clean_local_after_transfer && fs.existsSync(fakePath)) fs.unlinkSync(fakePath);
+  }
+
+  private async executeRapidTask(task: TaskRow, settings: any) {
+    if (!settings.mobile_authorization || !settings.mobile_uni) {
+      throw new Error("缺少移动云盘 Authorization/UNI");
+    }
+    let payload: any = {};
+    try {
+      payload = JSON.parse(task.source_paths_json || "{}");
+    } catch (_e) {
+      payload = {};
+    }
+    const rawItems = Array.isArray(payload) ? payload : payload.items;
+    if (!Array.isArray(rawItems) || !rawItems.length) throw new Error("items 不能为空");
+
+    const keepDirs = payload.keep_dirs !== false;
+    const concurrencyRaw = Number(payload.concurrency ?? 0);
+    const concurrency =
+      Number.isFinite(concurrencyRaw) && concurrencyRaw > 0 ? Math.min(Math.max(concurrencyRaw, 1), 16) : 8;
+    const retryRaw = Number(payload.retry ?? 0);
+    const retryCount = Number.isFinite(retryRaw) && retryRaw > 0 ? Math.min(Math.max(retryRaw, 1), 5) : 2;
+
+    const baseParent = (payload.parent_file_id || settings.mobile_parent_file_id || "").trim();
+    if (!baseParent) throw new Error("parent_file_id 不能为空");
+
+    const items: RapidItem[] = rawItems
+      .map((o: any) => {
+        const name = String(o.name || o.path || o.file || "");
+        const { base, dir } = splitPathParts(name);
+        return {
+          name,
+          size: Number(o.size ?? o.length ?? o.file_size ?? o.filesize ?? o.bytes ?? 0),
+          sha256: String(o.sha256 || o.hash || o.sha || "").toLowerCase(),
+          parent_file_id: o.parent_file_id ? String(o.parent_file_id) : undefined,
+          base_name: o.base_name || base || name,
+          relative_dir: o.relative_dir || dir || "",
+        };
+      })
+      .filter((x: RapidItem) => x.name && x.sha256);
+
+    if (!items.length) throw new Error("items 不能为空");
+
+    const totalBytes = items.reduce((sum, it) => sum + Number(it.size || 0), 0);
+    updateTask(task.id, {
+      total_files: items.length,
+      total_bytes: totalBytes,
+      updated_at: new Date().toISOString(),
+    } as any);
+    appendLog(
+      task.id,
+      `Rapid task start: items=${items.length}, concurrency=${concurrency}, retry=${retryCount}, keepDirs=${keepDirs}`,
+    );
+
+    const mobile = new MobileCloudClient(
+      settings.mobile_authorization,
+      settings.mobile_uni,
+      baseParent,
+      settings.mobile_cloud_host,
+      settings.mobile_app_channel,
+      settings.mobile_client_info,
+    );
+    const fakeExtRaw = settings.mobile_fake_extension?.trim() || ".jpg";
+    const fakeExt = fakeExtRaw.startsWith(".") ? fakeExtRaw : `.${fakeExtRaw}`;
+
+    const dirCache: Record<string, string> = {};
+
+    const shouldRetryRapid = (msg: string) => {
+      if (!msg) return true;
+      if (msg.includes("秒传未命中")) return false;
+      if (msg.includes("文件名称不符合标准")) return false;
+      return true;
+    };
+
+    const rapidUploadWithRetry = async (opts: {
+      file_name: string;
+      file_size: number;
+      content_hash: string;
+      parent_file_id: string;
+    }) => {
+      let lastErr: any;
+      for (let attempt = 1; attempt <= retryCount; attempt++) {
+        try {
+          return await mobile.rapid_upload_only(opts);
+        } catch (e: any) {
+          lastErr = e;
+          const msg = e?.message || String(e);
+          if (!shouldRetryRapid(msg) || attempt >= retryCount) throw e;
+          appendLog(task.id, `Rapid retry ${attempt}/${retryCount} failed: ${msg}`);
+          await sleep(400 * attempt);
+        }
+      }
+      throw lastErr || new Error("rapid upload failed");
+    };
+
+    const itemsByParent: Record<string, RapidItem[]> = {};
+    for (const it of items) {
+      const parentId = (it.parent_file_id || baseParent).trim() || baseParent;
+      itemsByParent[parentId] = itemsByParent[parentId] || [];
+      itemsByParent[parentId].push(it);
+    }
+    for (const [parentId, list] of Object.entries(itemsByParent)) {
+      const dirs = new Set<string>();
+      for (const it of list) {
+        const rel = keepDirs ? it.relative_dir || "" : "";
+        if (!rel) continue;
+        const parts = rel.split("/").filter(Boolean);
+        let built = "";
+        for (const seg of parts) {
+          built = built ? `${built}/${seg}` : seg;
+          dirs.add(built);
+        }
+      }
+      const ordered = Array.from(dirs).sort((a, b) => a.split("/").length - b.split("/").length);
+      for (const dir of ordered) {
+        await this.ensureMobileDir(mobile, parentId, dir, dirCache);
+      }
+    }
+
+    const queue = new PQueue({ concurrency });
+    let processedFiles = 0;
+    let processedBytes = 0;
+    let okCount = 0;
+    let renameFail = 0;
+    let missCount = 0;
+    let failCount = 0;
+
+    items.forEach((it, idx) => {
+      queue.add(async () => {
+        const parentId = (it.parent_file_id || baseParent).trim() || baseParent;
+        const baseName = it.base_name || it.name;
+        const relativeDir = keepDirs ? it.relative_dir || "" : "";
+        const stem = baseName.replace(/\.[^.]+$/, "");
+        const fakeName = `${stem}${fakeExt}`;
+        updateTask(task.id, { current_item: it.name } as any);
+        try {
+          const targetParent = relativeDir
+            ? await this.ensureMobileDir(mobile, parentId, relativeDir, dirCache)
+            : parentId;
+          const resu = await rapidUploadWithRetry({
+            file_name: fakeName,
+            file_size: Number(it.size || 0),
+            content_hash: it.sha256,
+            parent_file_id: targetParent,
+          });
+          const renamed = await this.ensureMobileRename(mobile, targetParent, resu.file_id, baseName, 5);
+          if (renamed) {
+            okCount += 1;
+            appendLog(task.id, `Mobile rename OK: ${baseName} (file_id=${resu.file_id})`);
+          } else {
+            renameFail += 1;
+            appendLog(task.id, `Mobile rename failed: ${baseName} (file_id=${resu.file_id})`);
+          }
+        } catch (err: any) {
+          const msg = err?.message || String(err);
+          if (msg.includes("秒传未命中")) missCount += 1;
+          else failCount += 1;
+          appendLog(task.id, `Rapid failed: ${it.name} -> ${msg}`);
+        } finally {
+          processedFiles += 1;
+          processedBytes += Number(it.size || 0);
+          updateTask(task.id, {
+            processed_files: processedFiles,
+            processed_bytes: processedBytes,
+            updated_at: new Date().toISOString(),
+          } as any);
+        }
+      });
+    });
+
+    await queue.onIdle();
+
+    const summary = `OK ${okCount}, RENAME_FAIL ${renameFail}, MISS ${missCount}, FAIL ${failCount}`;
+    const hasIssue = renameFail + missCount + failCount > 0;
+    updateTask(task.id, {
+      status: hasIssue ? "failed" : "success",
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      current_item: "",
+      message: summary,
+      error_message: hasIssue ? summary : "",
+    } as any);
+    appendLog(task.id, `Rapid task completed: ${summary}`);
+  }
+
+  private async existsInOpenlist(openlist: OpenListClient, dir: string, name: string) {
+    try {
+      const data = await openlist.list(dir, false, 1, 0);
+      const content = data.content || [];
+      return content.some((it: any) => it?.name === name);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private async ensureMobileRename(
+    mobile: MobileCloudClient,
+    parentId: string,
+    fileId: string,
+    expectedName: string,
+    attempts = 5,
+  ): Promise<boolean> {
+    let lastName = "";
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        await mobile.rename_file(fileId, expectedName, parentId);
+      } catch (_e) {
+        // ignore
+      }
+      try {
+        const items = await mobile.list_dir(parentId);
+        const found = items.find((i: any) => i.file_id === fileId);
+        if (found?.name) {
+          lastName = found.name;
+          if (found.name === expectedName) return true;
+        }
+      } catch (_e) {
+        // ignore
+      }
+      await sleep(500 * attempt);
+    }
+    if (lastName && lastName !== expectedName) {
+      logger.warn(`Mobile rename verify failed: file_id=${fileId}, name=${lastName}, expected=${expectedName}`);
+    }
+    return false;
+  }
+
+  private async renameOpenlistFile(opts: {
+    openlist: OpenListClient;
+    taskId: number;
+    targetDir: string;
+    candidateNames: string[];
+    newName: string;
+    delayBaseMs?: number;
+  }) {
+    const { openlist, taskId, targetDir, candidateNames, newName, delayBaseMs } = opts;
+    const names = Array.from(new Set(candidateNames.filter((n) => !!n)));
+    const maxAttempts = 5;
+    let lastErr: any;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      for (const name of names) {
+        const targetPath = this.joinRemote(targetDir, name);
+        try {
+          await openlist.rename(targetPath, newName);
+          appendLog(taskId, `OpenList rename success: ${targetPath} -> ${newName}`);
+          return;
+        } catch (e: any) {
+          lastErr = e;
+        }
+      }
+
+      try {
+        const data = await openlist.list(targetDir, true, 1, 0);
+        const content = data.content || [];
+        const found = content.find((it: any) => it && names.includes(it.name));
+        if (found?.name) {
+          const targetPath = this.joinRemote(targetDir, found.name);
+          await openlist.rename(targetPath, newName);
+          appendLog(taskId, `OpenList rename success: ${targetPath} -> ${newName}`);
+          return;
+        }
+      } catch (e: any) {
+        lastErr = e;
+      }
+
+      appendLog(
+        taskId,
+        `OpenList rename retry ${attempt}/${maxAttempts} failed: ${lastErr?.message || String(lastErr)}`,
+      );
+      const delay = (delayBaseMs || 1200) * attempt;
+      await sleep(delay);
+    }
+
+    throw lastErr || new Error("OpenList rename failed");
   }
 
   private async walkDir(openlist: OpenListClient, dir: string, prefix: string, out: FileItem[]) {
@@ -170,17 +559,32 @@ export class TransferQueue {
   }
 
   private joinRemote(base: string, child: string) {
-    const a = base.endsWith('/') ? base.slice(0, -1) : base;
-    const b = child.startsWith('/') ? child.slice(1) : child;
-    return `${a}/${b}`.replace(/\\/g, '/');
+    const a = base.endsWith("/") ? base.slice(0, -1) : base || "/";
+    const b = child.startsWith("/") ? child.slice(1) : child;
+    return `${a}/${b}`.replace(/\\/g, "/");
   }
 
-  private async ensureMobileDir(mobile: MobileCloudClient, root: string, relative: string) {
-    const clean = (relative || '').replace(/^\//, '').replace(/\.$/, '');
+  private async ensureMobileDir(
+    mobile: MobileCloudClient,
+    root: string,
+    relative: string,
+    cache: Record<string, string>,
+  ) {
+    const clean = (relative || "").replace(/^\//, "").replace(/\.$/, "");
     if (!clean) return root;
-    const parts = clean.split('/').filter(Boolean);
+    const rootKey = `${root}::${clean}`;
+    if (cache[rootKey]) return cache[rootKey];
+
+    const parts = clean.split("/").filter(Boolean);
     let current = root;
+    let built = "";
     for (const seg of parts) {
+      built = built ? `${built}/${seg}` : seg;
+      const builtKey = `${root}::${built}`;
+      if (cache[builtKey]) {
+        current = cache[builtKey];
+        continue;
+      }
       const items = await mobile.list_dir(current);
       const found = items.find((i: any) => i.is_dir && i.name === seg);
       if (found) {
@@ -188,7 +592,9 @@ export class TransferQueue {
       } else {
         current = await mobile.create_folder(current, seg);
       }
+      cache[builtKey] = current;
     }
     return current;
   }
 }
+
