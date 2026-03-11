@@ -112,6 +112,13 @@ export class MobileCloudClient {
       size: Number(it.size || 0),
       updated_at: it.updatedAt,
       created_at: it.createdAt,
+      content_hash:
+        it.contentHash ||
+        it.content_hash ||
+        it.sha256 ||
+        it.sha_256 ||
+        it.hash?.sha256 ||
+        "",
     }));
   }
 

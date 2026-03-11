@@ -16,6 +16,46 @@ const normalizeRemote = (p: string) => {
   return s || "/";
 };
 
+function isHex64(value: string) {
+  return /^[a-fA-F0-9]{64}$/.test(value);
+}
+
+function extractSha256(item: any): string {
+  const candidates = [
+    item?.content_hash,
+    item?.contentHash,
+    item?.sha256,
+    item?.sha_256,
+    item?.hash?.sha256,
+  ];
+  for (const v of candidates) {
+    if (typeof v === "string" && isHex64(v.trim())) return v.trim().toLowerCase();
+  }
+  if (typeof item?.hash === "string") {
+    const h = item.hash.trim();
+    if (isHex64(h)) return h.toLowerCase();
+    const match = h.match(/sha256[:=]([a-fA-F0-9]{64})/);
+    if (match) return match[1].toLowerCase();
+  }
+  return "";
+}
+
+function normalizePrefix(p: string) {
+  if (!p) return "";
+  let s = String(p).trim();
+  if (!s) return "";
+  s = s.replace(/\\/g, "/");
+  s = s.replace(/\/+/g, "/");
+  if (s.length > 1 && s.endsWith("/")) s = s.replace(/\/+$/, "");
+  return s;
+}
+
+function joinPrefix(prefix: string, name: string) {
+  if (!prefix) return name;
+  if (prefix === "/") return `/${name}`;
+  return `${prefix}/${name}`;
+}
+
 type RapidItem = {
   name: string;
   size: number;
@@ -344,6 +384,55 @@ router.post("/mobile/rapid-upload", async (req, res) => {
     });
     await queue.onIdle();
     ok(res, { parent_file_id: parent, results, concurrency });
+  } catch (e: any) {
+    fail(res, 400, e.message, e.message);
+  }
+});
+
+router.post("/mobile/export-hash", async (req, res) => {
+  try {
+    const settings = getSettings();
+    if (!settings.mobile_authorization || !settings.mobile_uni) return fail(res, 400, "缺少 mobile authorization/uni");
+    const parent = (req.body?.parent_file_id || settings.mobile_parent_file_id || "").trim();
+    if (!parent) return fail(res, 400, "parent_file_id 不能为空");
+    const includeMissing = req.body?.include_missing === true;
+    const basePrefix = normalizePrefix(req.body?.path_prefix || "");
+
+    const client = new MobileCloudClient(
+      settings.mobile_authorization,
+      settings.mobile_uni,
+      parent,
+      settings.mobile_cloud_host,
+      settings.mobile_app_channel,
+      settings.mobile_client_info,
+    );
+
+    const items: any[] = [];
+    let totalFiles = 0;
+    let missingHash = 0;
+
+    const walk = async (parentId: string, prefix: string) => {
+      const list = await client.list_dir(parentId);
+      for (const it of list) {
+        const nextName = joinPrefix(prefix, it.name);
+        if (it.is_dir) {
+          await walk(it.file_id, nextName);
+        } else {
+          totalFiles += 1;
+          const size = Number(it.size || 0);
+          const sha256 = extractSha256(it);
+          if (sha256) {
+            items.push({ name: nextName, size, sha256 });
+          } else {
+            missingHash += 1;
+            if (includeMissing) items.push({ name: nextName, size, sha256: "" });
+          }
+        }
+      }
+    };
+
+    await walk(parent, basePrefix);
+    ok(res, { items, total_files: totalFiles, missing_hash: missingHash });
   } catch (e: any) {
     fail(res, 400, e.message, e.message);
   }

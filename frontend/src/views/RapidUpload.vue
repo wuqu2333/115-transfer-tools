@@ -2,9 +2,15 @@
 import { onMounted, reactive, ref } from "vue";
 import { request } from "../api/request";
 import { useSettingsStore } from "../stores/settings";
-import { Button, Card, Form, Input, InputNumber, Upload, Switch, message } from "ant-design-vue";
+import { Button, Card, Form, Input, InputNumber, Upload, Switch, message, Modal, Table } from "ant-design-vue";
 
 type RapidItem = { name: string; size: number; sha256: string };
+interface MobileItem {
+  name: string;
+  file_id: string;
+  is_dir: boolean;
+  size: number;
+}
 
 const text = {
   title: "秒传导入",
@@ -21,6 +27,23 @@ const text = {
   parentRequired: "parent_file_id 不能为空",
   lineError: "行格式错误:",
   example: "示例：\nmovie.mp4|60906485|6914d7d6f4f55808745ce82d7954c81f1f18cf75ea3e39931955599e2a22dcd6",
+  exportTitle: "移动云盘 SHA256 导出",
+  exportTip: "仅导出移动云盘目录内已有 SHA256 的文件；缺少 SHA256 的会被跳过。",
+  exportDirLabel: "导出目录",
+  exportDirPlaceholder: "默认使用移动云盘父目录",
+  exportSelectDir: "选择目录",
+  exportBtn: "导出清单",
+  exportNeedParent: "请先在基础设置中配置移动云盘父目录 ID",
+  exportOk: (count: number) => `已导出 ${count} 条`,
+  exportWarn: (count: number) => `已导出 ${count} 条（部分文件缺少 SHA256）`,
+  exportFail: "导出失败",
+  pickerTitle: "选择移动云盘目录",
+  pickerPath: "当前目录",
+  pickerParent: "上一级",
+  pickerChoose: "选择当前目录",
+  pickerName: "目录名称",
+  pickerAction: "操作",
+  pickerEnter: "进入",
 };
 
 const form = reactive({
@@ -33,12 +56,39 @@ const keepDirs = ref(true);
 const concurrency = ref(8);
 const retryTimes = ref(2);
 const asTask = ref(true);
+const exporting = ref(false);
+
+const exportForm = reactive({
+  parent_file_id: "",
+  path: "/",
+});
+
+const pickerVisible = ref(false);
+const pickerLoading = ref(false);
+const pickerItems = ref<MobileItem[]>([]);
+const pickerStack = ref<{ id: string; name: string }[]>([]);
+
+const pickerColumns = [
+  { title: text.pickerName, dataIndex: "name" },
+  { title: text.pickerAction, dataIndex: "action", width: 120 },
+];
+
+const rootParentId = () => (settingsStore.data?.mobile_parent_file_id || "").trim();
+const currentPickerId = () =>
+  pickerStack.value.length ? pickerStack.value[pickerStack.value.length - 1].id : rootParentId();
+const currentPickerPath = () => {
+  const names = pickerStack.value.map((s) => s.name);
+  return "/" + names.join("/");
+};
 
 onMounted(async () => {
   try {
     await settingsStore.fetch();
     if (!form.parent_file_id.trim() && settingsStore.data.mobile_parent_file_id) {
       form.parent_file_id = settingsStore.data.mobile_parent_file_id;
+    }
+    if (!exportForm.parent_file_id.trim() && settingsStore.data.mobile_parent_file_id) {
+      exportForm.parent_file_id = settingsStore.data.mobile_parent_file_id;
     }
   } catch {
     // ignore settings load errors
@@ -161,6 +211,99 @@ const submit = async () => {
     message.error(e?.message || text.submitFail);
   }
 };
+
+async function loadMobileDirs(parentId: string) {
+  pickerLoading.value = true;
+  try {
+    const res: any = await request.post("/api/mobile/list", { parent_file_id: parentId });
+    const items = Array.isArray(res?.items) ? res.items : [];
+    pickerItems.value = items.filter((it: any) => it.is_dir);
+  } catch (e: any) {
+    message.error(e?.message || text.exportFail);
+  } finally {
+    pickerLoading.value = false;
+  }
+}
+
+function openExportPicker() {
+  const rootId = rootParentId();
+  if (!rootId) {
+    message.error(text.exportNeedParent);
+    return;
+  }
+  pickerStack.value = [];
+  pickerVisible.value = true;
+  loadMobileDirs(rootId);
+}
+
+function pickerEnterDir(record: MobileItem) {
+  if (!record.is_dir) return;
+  pickerStack.value.push({ id: record.file_id, name: record.name });
+  loadMobileDirs(record.file_id);
+}
+
+function pickerGoParent() {
+  if (pickerStack.value.length === 0) {
+    const rootId = rootParentId();
+    if (rootId) loadMobileDirs(rootId);
+    return;
+  }
+  pickerStack.value.pop();
+  const parentId = currentPickerId();
+  if (parentId) loadMobileDirs(parentId);
+}
+
+function pickerChooseCurrent() {
+  const currentId = currentPickerId();
+  if (!currentId) {
+    message.error(text.exportNeedParent);
+    return;
+  }
+  exportForm.parent_file_id = currentId;
+  exportForm.path = currentPickerPath() || "/";
+  pickerVisible.value = false;
+}
+
+function downloadJson(data: any, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function exportSha256() {
+  const parentId = exportForm.parent_file_id.trim() || rootParentId();
+  if (!parentId) {
+    message.error(text.exportNeedParent);
+    return;
+  }
+  exporting.value = true;
+  try {
+    const res: any = await request.post("/api/mobile/export-hash", {
+      parent_file_id: parentId,
+      path_prefix: exportForm.path || "/",
+    });
+    const items = Array.isArray(res?.items) ? res.items : [];
+    const missing = Number(res?.missing_hash || 0);
+    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+    const filename = `mobile_sha256_${ts}_${items.length}files.json`;
+    downloadJson(items, filename);
+    if (missing > 0) {
+      message.warning(text.exportWarn(items.length));
+    } else {
+      message.success(text.exportOk(items.length));
+    }
+  } catch (e: any) {
+    message.error(e?.message || text.exportFail);
+  } finally {
+    exporting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -202,8 +345,46 @@ const submit = async () => {
       </Form.Item>
       <Button type="primary" @click="submit">{{ text.submitBtn }}</Button>
     </Form>
+    <Card size="small" :title="text.exportTitle" style="margin-top: 12px">
+      <p class="tip">{{ text.exportTip }}</p>
+      <Form layout="vertical">
+        <Form.Item :label="text.exportDirLabel">
+          <div class="inline-row">
+            <Input v-model:value="exportForm.path" :placeholder="text.exportDirPlaceholder" readonly />
+            <Button @click="openExportPicker">{{ text.exportSelectDir }}</Button>
+          </div>
+        </Form.Item>
+        <Button type="primary" :loading="exporting" @click="exportSha256">{{ text.exportBtn }}</Button>
+      </Form>
+    </Card>
     <pre class="result" v-if="resultText">{{ resultText }}</pre>
   </Card>
+
+  <Modal v-model:open="pickerVisible" :title="text.pickerTitle" :footer="null" width="720">
+    <div class="picker-bar">
+      <Input :value="currentPickerPath()" :placeholder="text.pickerPath" readonly />
+      <Button @click="pickerGoParent">{{ text.pickerParent }}</Button>
+      <Button type="primary" @click="pickerChooseCurrent">{{ text.pickerChoose }}</Button>
+    </div>
+    <Table
+      :columns="pickerColumns"
+      :data-source="pickerItems"
+      :loading="pickerLoading"
+      row-key="file_id"
+      size="small"
+      :pagination="false"
+      :customRow="(record) => ({ onDblclick: () => (record as any).is_dir && pickerEnterDir(record as any) })"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.dataIndex === 'action'">
+          <Button size="small" @click="() => pickerEnterDir(record as any)">{{ text.pickerEnter }}</Button>
+        </template>
+        <template v-else>
+          {{ (record as any).name }}
+        </template>
+      </template>
+    </Table>
+  </Modal>
 </template>
 
 <style scoped>
@@ -229,6 +410,17 @@ const submit = async () => {
 .hint {
   font-size: 12px;
   color: var(--muted);
+}
+.picker-bar {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+@media (max-width: 720px) {
+  .picker-bar {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 

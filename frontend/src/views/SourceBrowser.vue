@@ -37,10 +37,6 @@ const text = {
   downloadSelect: "选择目录",
   createTask: "创建任务",
   clearSelected: "清空选择",
-  exportHash: "导出 SHA256 清单",
-  exportOk: (count: number) => `已导出 ${count} 条`,
-  exportWarn: (count: number) => `已导出 ${count} 条（部分文件缺少 SHA256）`,
-  exportFail: "导出失败",
   needSelected: "请先选择要转运的文件或文件夹",
   taskOk: (id: number) => `任务 #${id} 已创建`,
   taskFail: "创建任务失败",
@@ -69,7 +65,6 @@ const columns = [
 ];
 
 const selectedList = computed(() => Array.from(selected.value));
-const exporting = ref(false);
 
 async function load(p?: string) {
   loading.value = true;
@@ -179,46 +174,6 @@ function clearSelected() {
   schedulePersist();
 }
 
-function downloadJson(data: any, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-async function exportSha256() {
-  if (!selectedList.value.length) {
-    message.error(text.needSelected);
-    return;
-  }
-  exporting.value = true;
-  try {
-    const res: any = await request.post("/api/openlist/export-hash", {
-      paths: selectedList.value,
-      refresh: false,
-    });
-    const items = Array.isArray(res?.items) ? res.items : [];
-    const missing = Number(res?.missing_hash || 0);
-    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-    const filename = `sha256_export_${ts}_${items.length}files.json`;
-    downloadJson(items, filename);
-    if (missing > 0) {
-      message.warning(text.exportWarn(items.length));
-    } else {
-      message.success(text.exportOk(items.length));
-    }
-  } catch (e: any) {
-    message.error(e?.message || text.exportFail);
-  } finally {
-    exporting.value = false;
-  }
-}
-
 async function createTask() {
   if (!selectedList.value.length) {
     message.error(text.needSelected);
@@ -299,9 +254,6 @@ watch(
       </div>
       <div style="margin-top: 10px">
         <Button size="small" @click="clearSelected">{{ text.clearSelected }}</Button>
-        <Button size="small" :loading="exporting" style="margin-left: 8px" @click="exportSha256">
-          {{ text.exportHash }}
-        </Button>
       </div>
     </Card>
     <Card size="small" :title="text.taskTitle" style="margin-top: 10px">
