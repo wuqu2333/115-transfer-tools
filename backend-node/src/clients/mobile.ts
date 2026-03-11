@@ -105,10 +105,16 @@ export class MobileCloudClient {
     };
     const data = await this.request("POST", "/file/list", payload);
     const items = data.items || [];
+    const isFolder = (it: any) => {
+      const t = String(it.type || it.fileType || it.kind || "").toLowerCase();
+      if (t === "folder" || t === "dir" || t === "directory") return true;
+      if (it.isFolder === true || it.folder === true || it.is_dir === true) return true;
+      return false;
+    };
     return items.map((it: any) => ({
       name: it.name,
       file_id: it.fileId,
-      is_dir: it.type === "folder",
+      is_dir: isFolder(it),
       size: Number(it.size || 0),
       updated_at: it.updatedAt,
       created_at: it.createdAt,
