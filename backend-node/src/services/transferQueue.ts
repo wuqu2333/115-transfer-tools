@@ -3,7 +3,7 @@ import { mkdirSync, existsSync, rmSync, createWriteStream } from "fs";
 import PQueue from "p-queue";
 import { OpenListClient } from "../clients/openlist";
 import { MobileCloudClient } from "../clients/mobile";
-import { appendLog, getSettings, pendingTask, updateTask } from "../db";
+import { appendLog, getSettings, pendingTask, resetRunningTasks, updateTask } from "../db";
 import { FileItem, TaskRow } from "../models";
 import { logger } from "../logger";
 
@@ -95,6 +95,10 @@ export class TransferQueue {
 
   start() {
     if (this.running) return;
+    const recovered = resetRunningTasks();
+    if (recovered.length) {
+      recovered.forEach((id) => appendLog(id, "检测到服务重启，任务已重新排队"));
+    }
     this.running = true;
     void this.loop();
   }

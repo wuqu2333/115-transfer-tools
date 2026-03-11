@@ -262,6 +262,15 @@ export function listTasks(limit = 100): TaskRow[] {
   return db.prepare('SELECT * FROM transfer_tasks ORDER BY id DESC LIMIT ?').all(limit) as TaskRow[];
 }
 
+export function resetRunningTasks(): number[] {
+  const rows = db.prepare("SELECT id FROM transfer_tasks WHERE status='running'").all() as any[];
+  if (!rows.length) return [];
+  db.prepare("UPDATE transfer_tasks SET status='pending', updated_at=@updated_at WHERE status='running'").run({
+    updated_at: nowISO(),
+  });
+  return rows.map((r) => Number(r.id)).filter((n) => Number.isFinite(n));
+}
+
 export function pendingTask(): TaskRow | undefined {
   const row = db
     .prepare("SELECT * FROM transfer_tasks WHERE status='pending' ORDER BY id ASC LIMIT 1")
