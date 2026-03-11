@@ -127,17 +127,17 @@ router.post("/mobile/list", async (req, res) => {
   try {
     const settings = getSettings();
     const { parent_file_id, authorization, uni, cloud_host, app_channel, client_info } = req.body || {};
-    if (!parent_file_id) return fail(res, 400, "parent_file_id 不能为空");
+    const parentId = (parent_file_id || "/").toString().trim() || "/";
     const client = new MobileCloudClient(
       authorization || settings.mobile_authorization,
       uni || settings.mobile_uni,
-      parent_file_id,
+      parentId,
       cloud_host || settings.mobile_cloud_host,
       app_channel || settings.mobile_app_channel,
       client_info || settings.mobile_client_info,
     );
-    const items = await client.list_dir(parent_file_id);
-    ok(res, { parent_file_id, items });
+    const items = await client.list_dir(parentId);
+    ok(res, { parent_file_id: parentId, items });
   } catch (e: any) {
     fail(res, 400, e.message, e.message);
   }
@@ -393,8 +393,7 @@ router.post("/mobile/export-hash", async (req, res) => {
   try {
     const settings = getSettings();
     if (!settings.mobile_authorization || !settings.mobile_uni) return fail(res, 400, "缺少 mobile authorization/uni");
-    const parent = (req.body?.parent_file_id || settings.mobile_parent_file_id || "").trim();
-    if (!parent) return fail(res, 400, "parent_file_id 不能为空");
+    const parent = (req.body?.parent_file_id || "/").toString().trim() || "/";
     const includeMissing = req.body?.include_missing === true;
     const basePrefix = normalizePrefix(req.body?.path_prefix || "");
 

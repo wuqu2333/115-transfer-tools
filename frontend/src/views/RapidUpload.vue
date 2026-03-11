@@ -33,7 +33,7 @@ const text = {
   exportDirPlaceholder: "默认使用移动云盘父目录",
   exportSelectDir: "选择目录",
   exportBtn: "导出清单",
-  exportNeedParent: "请先在基础设置中配置移动云盘父目录 ID",
+  exportNeedParent: "无法获取移动云盘目录（请检查 Authorization / x-yun-uni）",
   exportOk: (count: number) => `已导出 ${count} 条`,
   exportWarn: (count: number) => `已导出 ${count} 条（部分文件缺少 SHA256）`,
   exportFail: "导出失败",
@@ -73,7 +73,7 @@ const pickerColumns = [
   { title: text.pickerAction, dataIndex: "action", width: 120 },
 ];
 
-const rootParentId = () => (settingsStore.data?.mobile_parent_file_id || "").trim();
+const rootParentId = () => "/";
 const currentPickerId = () => {
   const root = rootParentId();
   if (!pickerStack.value.length) return root || "";
@@ -92,8 +92,8 @@ onMounted(async () => {
     if (!form.parent_file_id.trim() && settingsStore.data.mobile_parent_file_id) {
       form.parent_file_id = settingsStore.data.mobile_parent_file_id;
     }
-    if (!exportForm.parent_file_id.trim() && settingsStore.data.mobile_parent_file_id) {
-      exportForm.parent_file_id = settingsStore.data.mobile_parent_file_id;
+    if (!exportForm.parent_file_id.trim()) {
+      exportForm.parent_file_id = "/";
     }
   } catch {
     // ignore settings load errors
@@ -232,10 +232,6 @@ async function loadMobileDirs(parentId: string) {
 
 function openExportPicker() {
   const rootId = rootParentId();
-  if (!rootId) {
-    message.error(text.exportNeedParent);
-    return;
-  }
   pickerStack.value = [];
   pickerVisible.value = true;
   loadMobileDirs(rootId);
@@ -260,10 +256,6 @@ function pickerGoParent() {
 
 function pickerChooseCurrent() {
   const currentId = currentPickerId();
-  if (!currentId) {
-    message.error(text.exportNeedParent);
-    return;
-  }
   exportForm.parent_file_id = currentId;
   exportForm.path = currentPickerPath() || "/";
   pickerVisible.value = false;
@@ -283,10 +275,6 @@ function downloadJson(data: any, filename: string) {
 
 async function exportSha256() {
   const parentId = exportForm.parent_file_id.trim() || rootParentId();
-  if (!parentId) {
-    message.error(text.exportNeedParent);
-    return;
-  }
   exporting.value = true;
   try {
     const res: any = await request.post("/api/mobile/export-hash", {
