@@ -12,13 +12,38 @@ const MAX_PART_INFOS_PER_REQUEST = 100;
 
 type PartSpec = { partNumber: number; partSize: number; offset: number };
 
-async function sha256(path: string): Promise<string> {
+function abortMessage(reason: unknown) {
+  return typeof reason === "string" && reason ? reason : "operation aborted";
+}
+
+function createAbortError(reason?: unknown) {
+  const err: any = new Error(abortMessage(reason));
+  err.name = "AbortError";
+  err.code = "ERR_CANCELED";
+  return err;
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw createAbortError(signal.reason);
+}
+
+async function sha256(path: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash("sha256");
     const stream = createReadStream(path);
+    const onAbort = () => {
+      stream.destroy(createAbortError(signal?.reason));
+    };
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
     stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => resolve(hash.digest("hex")));
-    stream.on("error", reject);
+    stream.on("end", () => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve(hash.digest("hex"));
+    });
+    stream.on("error", (err) => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      reject(err);
+    });
   });
 }
 
@@ -86,16 +111,17 @@ export class MobileCloudClient {
     } as any;
   }
 
-  private async request(method: string, endpoint: string, payload?: any, timeout = 30000) {
+  private async request(method: string, endpoint: string, payload?: any, timeout = 30000, signal?: AbortSignal) {
     const url = `${this.cloud_host}${endpoint}`;
-    const resp = await axios.request({ method, url, data: payload, headers: this.headers(), timeout });
+    throwIfAborted(signal);
+    const resp = await axios.request({ method, url, data: payload, headers: this.headers(), timeout, signal });
     const data = resp.data;
     if (resp.status >= 400) throw new MobileCloudError(`request failed: ${url}, http=${resp.status}`);
     if (!data?.success) throw new MobileCloudError(`接口返回失败: ${url}, 响应=${JSON.stringify(data)}`);
     return data.data || {};
   }
 
-  async list_dir(parent_file_id: string) {
+  async list_dir(parent_file_id: string, signal?: AbortSignal) {
     const payload = {
       imageThumbnailStyleList: ["Small", "Large"],
       orderBy: "updated_at",
@@ -103,7 +129,7 @@ export class MobileCloudClient {
       pageInfo: { pageCursor: "", pageSize: 100 },
       parentFileId: parent_file_id,
     };
-    const data = await this.request("POST", "/file/list", payload);
+    const data = await this.request("POST", "/file/list", payload, 30000, signal);
     const items = data.items || [];
     const isFolder = (it: any) => {
       const t = String(it.type || it.fileType || it.kind || "").toLowerCase();
@@ -128,7 +154,7 @@ export class MobileCloudClient {
     }));
   }
 
-  async create_folder(parent_file_id: string, name: string) {
+  async create_folder(parent_file_id: string, name: string, signal?: AbortSignal) {
     const payload = {
       parentFileId: parent_file_id,
       name,
@@ -136,7 +162,7 @@ export class MobileCloudClient {
       type: "folder",
       fileRenameMode: "force_rename",
     };
-    const data = await this.request("POST", "/file/create", payload);
+    const data = await this.request("POST", "/file/create", payload, 30000, signal);
     const fileId = data.fileId;
     if (!fileId) throw new MobileCloudError("create folder missing fileId");
     return String(fileId);
@@ -148,6 +174,7 @@ export class MobileCloudClient {
     content_hash: string;
     parent_file_id: string;
     part_specs: PartSpec[];
+    signal?: AbortSignal;
   }) {
     const partInfos = opts.part_specs.slice(0, MAX_PART_INFOS_PER_REQUEST).map((p) => ({
       partNumber: p.partNumber,
@@ -169,7 +196,7 @@ export class MobileCloudClient {
       type: "file",
       userRegion: { cityCode: "731", provinceCode: "731" },
     };
-    const data = await this.request("POST", "/file/create", payload);
+    const data = await this.request("POST", "/file/create", payload, 30000, opts.signal);
     const upload_id = String(data.uploadId || "");
     const file_id = String(data.fileId || "");
     const upload_urls = extractUploadUrls(data.partInfos);
@@ -180,7 +207,7 @@ export class MobileCloudClient {
     return { upload_id, file_id, upload_urls, rapid_upload, uploaded_name };
   }
 
-  private async getUploadUrls(file_id: string, upload_id: string, part_specs: PartSpec[]) {
+  private async getUploadUrls(file_id: string, upload_id: string, part_specs: PartSpec[], signal?: AbortSignal) {
     const payload = {
       fileId: file_id,
       uploadId: upload_id,
@@ -190,7 +217,7 @@ export class MobileCloudClient {
         parallelHashCtx: { partOffset: p.offset },
       })),
     };
-    const data = await this.request("POST", "/file/getUploadUrl", payload);
+    const data = await this.request("POST", "/file/getUploadUrl", payload, 30000, signal);
     const urls = extractUploadUrls(data.partInfos);
     if (!Object.keys(urls).length) throw new MobileCloudError(`file/getUploadUrl missing upload urls: ${JSON.stringify(data)}`);
     return urls;
@@ -201,9 +228,11 @@ export class MobileCloudClient {
     specs: PartSpec[],
     upload_urls: Record<number, string>,
     onProgress?: (delta: number) => void,
+    signal?: AbortSignal,
   ) {
     if (!specs.length) return;
     for (const part of specs) {
+      throwIfAborted(signal);
       const uploadUrl = upload_urls[part.partNumber];
       if (!uploadUrl) throw new MobileCloudError(`missing upload url for part ${part.partNumber}`);
       if (part.partSize === 0) {
@@ -215,43 +244,60 @@ export class MobileCloudClient {
             Referer: "https://yun.139.com/",
           },
           timeout: 600000,
+          signal,
         });
         continue;
       }
       const stream = createReadStream(file_path, { start: part.offset, end: part.offset + part.partSize - 1 });
+      const onAbort = () => {
+        stream.destroy(createAbortError(signal?.reason));
+      };
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
       if (onProgress) {
         stream.on("data", (chunk: Buffer) => {
           onProgress(chunk.length);
         });
       }
-      const resp = await axios.put(uploadUrl, stream, {
-        headers: {
-          "Content-Type": "application/octet-stream",
-          "Content-Length": String(part.partSize),
-          Origin: "https://yun.139.com",
-          Referer: "https://yun.139.com/",
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 600000,
-      });
+      let resp;
+      try {
+        resp = await axios.put(uploadUrl, stream, {
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": String(part.partSize),
+            Origin: "https://yun.139.com",
+            Referer: "https://yun.139.com/",
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+          timeout: 600000,
+          signal,
+        });
+      } finally {
+        if (signal) signal.removeEventListener("abort", onAbort);
+      }
       if (![200, 201].includes(resp.status)) {
         throw new MobileCloudError(`part upload failed: part=${part.partNumber}, http=${resp.status}, body=${resp.data}`);
       }
     }
   }
 
-  private async completeUpload(upload_id: string, file_id: string, content_hash: string) {
+  private async completeUpload(upload_id: string, file_id: string, content_hash: string, signal?: AbortSignal) {
     const payload = {
       contentHash: content_hash,
       contentHashAlgorithm: "SHA256",
       fileId: file_id,
       uploadId: upload_id,
     };
-    await this.request("POST", "/file/complete", payload);
+    await this.request("POST", "/file/complete", payload, 30000, signal);
   }
 
-  async rapid_upload_only(opts: { file_name: string; file_size: number; content_hash: string; parent_file_id?: string }) {
+  async rapid_upload_only(opts: {
+    file_name: string;
+    file_size: number;
+    content_hash: string;
+    parent_file_id?: string;
+    signal?: AbortSignal;
+  }) {
     const parent = (opts.parent_file_id || this.parent_file_id).trim();
     if (!parent) throw new MobileCloudError("upload missing parentFileId");
     const part_specs = buildPartSpecs(opts.file_size);
@@ -261,6 +307,7 @@ export class MobileCloudClient {
       content_hash: opts.content_hash,
       parent_file_id: parent,
       part_specs,
+      signal: opts.signal,
     });
     if (!rapid_upload) throw new MobileCloudError("秒传未命中，需要真实上传");
     return { file_id, upload_id, uploaded_name, file_size: opts.file_size, content_hash: opts.content_hash };
@@ -270,9 +317,11 @@ export class MobileCloudClient {
     file_path: string,
     parent_file_id?: string,
     onProgress?: (delta: number, loaded: number, total?: number) => void,
+    signal?: AbortSignal,
   ) {
+    throwIfAborted(signal);
     const size = statSync(file_path).size;
-    const hash = await sha256(file_path);
+    const hash = await sha256(file_path, signal);
     const parent = (parent_file_id || this.parent_file_id).trim();
     if (!parent) throw new MobileCloudError("upload missing parentFileId");
     const part_specs = buildPartSpecs(size);
@@ -282,6 +331,7 @@ export class MobileCloudClient {
       content_hash: hash,
       parent_file_id: parent,
       part_specs,
+      signal,
     });
 
     if (!rapid_upload) {
@@ -292,26 +342,26 @@ export class MobileCloudClient {
       };
       const firstBatch = part_specs.slice(0, MAX_PART_INFOS_PER_REQUEST);
       if (firstBatch.length) {
-        const urls = Object.keys(upload_urls).length ? upload_urls : await this.getUploadUrls(file_id, upload_id, firstBatch);
-        await this.uploadParts(file_path, firstBatch, urls, notify);
+        const urls = Object.keys(upload_urls).length ? upload_urls : await this.getUploadUrls(file_id, upload_id, firstBatch, signal);
+        await this.uploadParts(file_path, firstBatch, urls, notify, signal);
       }
       for (let start = MAX_PART_INFOS_PER_REQUEST; start < part_specs.length; start += MAX_PART_INFOS_PER_REQUEST) {
         const batch = part_specs.slice(start, start + MAX_PART_INFOS_PER_REQUEST);
-        const urls = await this.getUploadUrls(file_id, upload_id, batch);
-        await this.uploadParts(file_path, batch, urls, notify);
+        const urls = await this.getUploadUrls(file_id, upload_id, batch, signal);
+        await this.uploadParts(file_path, batch, urls, notify, signal);
       }
-      await this.completeUpload(upload_id, file_id, hash);
+      await this.completeUpload(upload_id, file_id, hash, signal);
     }
 
     return { file_id, upload_id, uploaded_name, file_size: size, content_hash: hash };
   }
 
-  async rename_file(file_id: string, new_name: string, parent_file_id?: string) {
+  async rename_file(file_id: string, new_name: string, parent_file_id?: string, signal?: AbortSignal) {
     const payload = { fileId: file_id, name: new_name, description: "" };
-    await this.request("POST", "/file/update", payload);
+    await this.request("POST", "/file/update", payload, 30000, signal);
     if (!parent_file_id) return;
     try {
-      const items = await this.list_dir(parent_file_id);
+      const items = await this.list_dir(parent_file_id, signal);
       const found = items.find((i: any) => i.file_id === file_id);
       if (found && found.name === new_name) return;
       throw new MobileCloudError("rename verify failed");

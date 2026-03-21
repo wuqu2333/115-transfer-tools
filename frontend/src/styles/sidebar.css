@@ -1,0 +1,206 @@
+/* 侧边栏样式 */
+
+/* 玻璃态侧边栏 */
+.glass-sidebar {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: relative;
+  z-index: 10;
+  transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+}
+
+/* 白天模式侧边栏 */
+.glass-sidebar:not(.dark),
+html:not(.dark) .glass-sidebar {
+  background: var(--ui-panel-light) !important;
+  border-right: 1px solid var(--ui-border-light);
+}
+
+/* 暗色模式侧边栏 */
+.dark .glass-sidebar,
+html.dark .glass-sidebar {
+  background: var(--ui-panel-dark) !important;
+  border-right: 1px solid var(--ui-border-dark);
+}
+
+/* Logo 区域 */
+.logo {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 16px;
+  border-bottom: 1px solid var(--ui-border-light);
+  background: color-mix(in srgb, var(--ui-panel-light) 78%, #fff 22%);
+  position: relative;
+  z-index: 1;
+}
+
+.logo.collapsed {
+  min-height: 96px;
+  padding: 16px 10px;
+}
+
+.dark .logo {
+  border-bottom: 1px solid var(--ui-border-dark);
+  background: color-mix(in srgb, var(--ui-panel-dark) 84%, #000 16%);
+}
+
+
+.logo-subtitle {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 4px;
+  color: var(--ui-text-secondary-light);
+}
+
+.dark .logo-subtitle {
+  color: var(--ui-text-secondary-dark);
+}
+
+/* 菜单样式 */
+:deep(.n-menu-item) {
+  border-radius: 12px !important;
+  margin: 8px 12px !important;
+  transition: all 0.3s ease !important;
+}
+
+/* 白天模式菜单项颜色 */
+:deep(.n-menu-item:not(.n-menu-item--selected)) {
+  color: var(--ui-text-primary-light) !important;
+}
+
+/* 夜晚模式菜单项颜色 */
+.dark :deep(.n-menu-item:not(.n-menu-item--selected)) {
+  color: var(--ui-text-primary-dark) !important;
+}
+
+:deep(.n-menu-item:hover) {
+  transform: translateX(4px);
+  background: color-mix(in srgb, var(--ui-accent-soft) 55%, transparent 45%) !important;
+}
+
+.dark :deep(.n-menu-item:hover) {
+  background: color-mix(in srgb, var(--ui-accent) 18%, transparent 82%) !important;
+}
+
+.glass-sidebar :deep(.n-menu-item.n-menu-item--selected) {
+  background: var(--ui-accent-grad) !important;
+  color: #ffffff !important;
+}
+
+.glass-sidebar :deep(.n-menu-item.n-menu-item--selected .n-menu-item-content),
+.glass-sidebar :deep(.n-menu-item.n-menu-item--selected .n-menu-item-content-header),
+.glass-sidebar :deep(.n-menu-item.n-menu-item--selected .n-menu-item-content__icon),
+.glass-sidebar :deep(.n-menu-item.n-menu-item--selected .n-menu-item-content__title) {
+  color: #ffffff !important;
+}
+
+/* 图标颜色修复 */
+:deep(.n-menu-item .n-icon),
+:deep(.n-menu-item .n-icon svg),
+:deep(.n-menu-item .n-icon svg path),
+:deep(.n-menu-item .n-icon svg circle),
+:deep(.n-menu-item .n-icon svg rect),
+:deep(.n-menu-item .n-icon svg polygon),
+:deep(.n-menu-item .n-icon svg polyline),
+:deep(.n-menu-item .n-icon svg line),
+:deep(.n-menu-item .n-icon svg ellipse) {
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* 白天模式 - 未选中状态的图标颜色 */
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg path),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg circle),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg rect),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg polygon),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg polyline),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg line),
+:deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg ellipse) {
+  color: var(--ui-text-primary-light) !important;
+  fill: var(--ui-text-primary-light) !important;
+  stroke: var(--ui-text-primary-light) !important;
+}
+
+/* 夜晚模式 - 未选中状态的图标颜色 */
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg path),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg circle),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg rect),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg polygon),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg polyline),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg line),
+.dark :deep(.n-menu-item:not(.n-menu-item--selected) .n-icon svg ellipse) {
+  color: var(--ui-text-primary-dark) !important;
+  fill: var(--ui-text-primary-dark) !important;
+  stroke: var(--ui-text-primary-dark) !important;
+}
+
+/* 选中状态的图标颜色 */
+:deep(.n-menu-item.n-menu-item--selected .n-icon),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg path),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg circle),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg rect),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg polygon),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg polyline),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg line),
+:deep(.n-menu-item.n-menu-item--selected .n-icon svg ellipse) {
+  color: white !important;
+  fill: white !important;
+  stroke: white !important;
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .glass-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh !important;
+    width: 280px !important;
+    z-index: 1000 !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+      4px 0 24px rgba(0, 0, 0, 0.2),
+      2px 0 8px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(30px) saturate(180%);
+  }
+  
+  .glass-sidebar:not(.dark) {
+    background: color-mix(in srgb, var(--ui-panel-light) 96%, #fff 4%) !important;
+  }
+  
+  .dark .glass-sidebar,
+  html.dark .glass-sidebar {
+    background: color-mix(in srgb, var(--ui-panel-dark) 96%, #000 4%) !important;
+  }
+  
+  .glass-sidebar.mobile-sidebar-open {
+    transform: translateX(0);
+  }
+  
+  .logo {
+    padding: 14px 12px;
+    min-height: 88px;
+  }
+
+  .logo-subtitle {
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .glass-sidebar {
+    width: 220px !important;
+  }
+}
+

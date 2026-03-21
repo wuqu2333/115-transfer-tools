@@ -1,7 +1,9 @@
-ï»¿import axios, { type AxiosResponse } from "axios";
-import { message } from "ant-design-vue";
+import axios, { type AxiosResponse } from "axios";
+import { createDiscreteApi } from "naive-ui";
 
 export type RequestResult<T> = Promise<T>;
+
+const { message } = createDiscreteApi(["message"]);
 
 const instance = axios.create({
   baseURL: "",
@@ -23,7 +25,7 @@ instance.interceptors.response.use(
     const data = resp.data;
     if (ct.includes("application/json") && data && typeof data === "object" && "code" in data) {
       if ((data as any).code !== 200) {
-        const msg = (data as any).message || `æ¥å£é”™è¯¯ code=${(data as any).code}`;
+        const msg = (data as any).message || `½Ó¿Ú´íÎó code=${(data as any).code}`;
         message.error(msg);
         return Promise.reject(new Error(msg));
       }
@@ -36,11 +38,10 @@ instance.interceptors.response.use(
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
-      "ç½‘ç»œé”™è¯¯";
+      "ÍøÂç´íÎó";
     message.error(msg);
     return Promise.reject(error);
   },
 );
 
 export const request = instance;
-

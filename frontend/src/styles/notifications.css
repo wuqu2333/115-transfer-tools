@@ -1,0 +1,83 @@
+/* 通知配置页面样式 */
+
+.notifications-page {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  width: 100%;
+  padding: clamp(16px, 3vw, 20px);
+}
+
+.configs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-card {
+  padding: 20px;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+.config-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.config-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.config-icon {
+  font-size: 24px;
+}
+
+.config-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.config-body {
+  margin-top: 12px;
+}
+
+.config-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-label {
+  color: #666;
+  font-size: 14px;
+  min-width: 80px;
+}
+
+.info-value {
+  color: #333;
+  font-size: 14px;
+}
+
+.dark .info-label {
+  color: #999;
+}
+
+.dark .info-value {
+  color: #fff;
+}
+

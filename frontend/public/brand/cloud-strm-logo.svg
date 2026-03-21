@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 10 980 390" fill="none">
+  <defs>
+    <linearGradient id="brandBlue" x1="40" y1="30" x2="290" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34A0FF"/>
+      <stop offset="100%" stop-color="#0F7FF2"/>
+    </linearGradient>
+  </defs>
+  <path d="M 316 138 L 316 112 L 309 87 L 295 63 L 274 44 L 248 31 L 220 25 L 192 27 L 166 36 L 144 53 L 128 75 L 120 99 L 118 116 L 98 116 L 79 121 L 61 132 L 48 149 L 42 169 L 44 189 L 54 208 L 69 223 L 88 232 L 110 235 L 132 233" stroke="url(#brandBlue)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 196 176 L 122 250 L 122 360 L 268 214" stroke="url(#brandBlue)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 255 224 L 170 309" stroke="url(#brandBlue)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#0C2A59" font-family="Arial, Helvetica, 'Microsoft YaHei', sans-serif">
+    <text x="375" y="145" font-size="118" font-weight="700">Cloud</text>
+    <text x="375" y="262" font-size="118" font-weight="700">STRM</text>
+    <text x="375" y="347" font-size="82" font-weight="600">Generator</text>
+  </g>
+</svg>

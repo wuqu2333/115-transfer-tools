@@ -1,9 +1,9 @@
 ﻿<script setup lang="ts">
-import { onMounted, ref, computed, reactive, watch } from "vue";
+import { onMounted, ref, computed, reactive, watch, h } from "vue";
 import { request } from "../api/request";
-import { Button, Card, Form, Input, Select, Table, message } from "ant-design-vue";
-import { FolderOutlined, FileOutlined } from "@ant-design/icons-vue";
 import { useSettingsStore } from "../stores/settings";
+import { NButton, NIcon, useMessage, type DataTableColumns } from "naive-ui";
+import { FolderOutlined, FileOutlined } from "@vicons/antd";
 
 interface BrowserItem {
   name: string;
@@ -42,6 +42,7 @@ const text = {
   taskFail: "创建任务失败",
 };
 
+const message = useMessage();
 const path = ref("/115");
 const items = ref<BrowserItem[]>([]);
 const selected = ref<Set<string>>(new Set());
@@ -57,14 +58,69 @@ const taskForm = reactive({
 const isRestoring = ref(true);
 let saveTimer: number | undefined;
 
-const columns = [
-  { title: text.name, dataIndex: "name" },
-  { title: text.size, dataIndex: "size" },
-  { title: text.modified, dataIndex: "modified" },
-  { title: text.action, dataIndex: "action", width: 140 },
+const selectedList = computed(() => Array.from(selected.value));
+
+const providerOptions = [
+  { label: text.providerMobile, value: "mobile" },
+  { label: text.providerSharepoint, value: "sharepoint" },
 ];
 
-const selectedList = computed(() => Array.from(selected.value));
+const columns: DataTableColumns<BrowserItem> = [
+  {
+    title: text.name,
+    key: "name",
+    render: (row) =>
+      h(
+        "span",
+        { class: "name-cell" },
+        [
+          h(
+            NIcon,
+            { class: "name-icon", size: 16 },
+            { default: () => h(row.is_dir ? FolderOutlined : FileOutlined) },
+          ),
+          h("span", null, row.name),
+        ],
+      ),
+  },
+  {
+    title: text.size,
+    key: "size",
+    render: (row) => (row.size ?? "-") as any,
+  },
+  {
+    title: text.modified,
+    key: "modified",
+    render: (row) => row.modified || "-",
+  },
+  {
+    title: text.action,
+    key: "action",
+    width: 180,
+    render: (row) =>
+      h(
+        "div",
+        { class: "action-row" },
+        [
+          h(
+            NButton,
+            { size: "tiny", onClick: () => enter(row) },
+            { default: () => (row.is_dir ? text.enter : text.select) },
+          ),
+          h(
+            NButton,
+            { size: "tiny", secondary: true, onClick: () => toggle(row) },
+            { default: () => (selected.value.has(row.path) ? text.cancel : text.multi) },
+          ),
+        ],
+      ),
+  },
+];
+
+const rowKey = (row: BrowserItem) => row.path;
+const rowProps = (row: BrowserItem) => ({
+  onDblclick: () => row.is_dir && enter(row),
+});
 
 async function load(p?: string) {
   loading.value = true;
@@ -124,6 +180,11 @@ function enter(record: BrowserItem) {
 function toggle(record: BrowserItem) {
   if (selected.value.has(record.path)) selected.value.delete(record.path);
   else selected.value.add(record.path);
+}
+
+function removeSelected(p: string) {
+  selected.value.delete(p);
+  schedulePersist();
 }
 
 function goParent() {
@@ -212,71 +273,64 @@ watch(
 </script>
 
 <template>
-  <Card :title="text.title" :bordered="false">
+  <n-card :title="text.title" :bordered="false" class="page-card">
     <div class="path-row">
-      <Input v-model:value="path" />
-      <Button @click="() => load(path as any)">{{ text.jump }}</Button>
-      <Button @click="goParent">{{ text.parent }}</Button>
+      <n-input v-model:value="path" />
+      <n-button @click="() => load(path as any)">{{ text.jump }}</n-button>
+      <n-button @click="goParent">{{ text.parent }}</n-button>
     </div>
-    <Table
-      :data-source="items"
+
+    <n-data-table
+      :data="items"
       :columns="columns"
       :loading="loading"
-      row-key="path"
+      :pagination="false"
+      :row-key="rowKey"
+      :row-props="rowProps"
       size="small"
-      :customRow="(record) => ({ onDblclick: () => (record as any).is_dir && enter(record as any) })"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.dataIndex === 'name'">
-          <span class="name-cell">
-            <FolderOutlined v-if="(record as any).is_dir" class="name-icon" />
-            <FileOutlined v-else class="name-icon" />
-            <span>{{ (record as any).name }}</span>
-          </span>
-        </template>
-        <template v-else-if="column.dataIndex === 'action'">
-          <Button size="small" @click="() => enter(record as any)">{{ (record as any).is_dir ? text.enter : text.select }}</Button>
-          <Button size="small" @click="() => toggle(record as any)" style="margin-left: 6px">
-            {{ selected.has((record as any).path) ? text.cancel : text.multi }}
-          </Button>
-        </template>
-        <template v-else>
-          {{ (record as any)[column.dataIndex as string] ?? "-" }}
-        </template>
-      </template>
-    </Table>
-    <Card size="small" :title="text.selectedTitle" style="margin-top: 10px">
+    />
+
+    <n-card size="small" :title="text.selectedTitle" style="margin-top: 12px">
       <div class="selected-box">
-        <span v-for="p in selectedList" :key="p" class="pill">
+        <n-tag
+          v-for="p in selectedList"
+          :key="p"
+          closable
+          size="small"
+          @close="removeSelected(p)"
+        >
           {{ p }}
-          <button @click="selected.delete(p)">x</button>
-        </span>
+        </n-tag>
+        <span v-if="!selectedList.length" class="hint">{{ text.needSelected }}</span>
       </div>
       <div style="margin-top: 10px">
-        <Button size="small" @click="clearSelected">{{ text.clearSelected }}</Button>
+        <n-button size="small" @click="clearSelected">{{ text.clearSelected }}</n-button>
       </div>
-    </Card>
-    <Card size="small" :title="text.taskTitle" style="margin-top: 10px">
-      <Form layout="vertical">
-        <Form.Item :label="text.providerLabel">
-          <Select :value="taskForm.provider" style="max-width: 240px" @change="onProviderChange">
-            <Select.Option value="mobile">{{ text.providerMobile }}</Select.Option>
-            <Select.Option value="sharepoint">{{ text.providerSharepoint }}</Select.Option>
-          </Select>
-        </Form.Item>
-        <Form.Item :label="text.targetLabel">
-          <Input v-model:value="taskForm.target_path" />
-        </Form.Item>
-        <Form.Item :label="text.downloadBaseLabel">
+    </n-card>
+
+    <n-card size="small" :title="text.taskTitle" style="margin-top: 12px">
+      <n-form label-placement="top">
+        <n-form-item :label="text.providerLabel">
+          <n-select
+            v-model:value="taskForm.provider"
+            :options="providerOptions"
+            style="max-width: 240px"
+            @update:value="onProviderChange"
+          />
+        </n-form-item>
+        <n-form-item :label="text.targetLabel">
+          <n-input v-model:value="taskForm.target_path" />
+        </n-form-item>
+        <n-form-item :label="text.downloadBaseLabel">
           <div class="path-row">
-            <Input v-model:value="taskForm.download_base_path" />
-            <Button @click="selectLocalDir">{{ text.downloadSelect }}</Button>
+            <n-input v-model:value="taskForm.download_base_path" />
+            <n-button @click="selectLocalDir">{{ text.downloadSelect }}</n-button>
           </div>
-        </Form.Item>
-        <Button type="primary" @click="createTask">{{ text.createTask }}</Button>
-      </Form>
-    </Card>
-  </Card>
+        </n-form-item>
+        <n-button type="primary" @click="createTask">{{ text.createTask }}</n-button>
+      </n-form>
+    </n-card>
+  </n-card>
 </template>
 
 <style scoped>
@@ -290,25 +344,11 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.pill {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  background: var(--panel-2);
 }
-.pill button {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #ffffff;
-  cursor: pointer;
-  line-height: 16px;
+.hint {
   font-size: 12px;
+  color: var(--muted);
 }
 .name-cell {
   display: inline-flex;
@@ -318,6 +358,10 @@ watch(
 .name-icon {
   color: var(--muted);
   font-size: 14px;
+}
+.action-row {
+  display: inline-flex;
+  gap: 6px;
 }
 @media (max-width: 720px) {
   .path-row {

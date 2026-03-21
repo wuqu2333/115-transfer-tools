@@ -1,0 +1,39 @@
+/* 表单相关样式 */
+
+/* 模态框头部 */
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.modal-header p {
+  margin: 4px 0 0 0;
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+/* 表单圆角化（排除 input 内部的功能按钮，如密码显示/隐藏） */
+:deep(.n-input),
+:deep(.n-select) {
+  border-radius: 12px !important;
+}
+
+/* 仅对独立按钮应用圆角，不影响 input suffix 内的按钮 */
+:deep(.n-form-item > .n-form-item-blank > .n-button),
+:deep(.n-space > .n-button) {
+  border-radius: 12px !important;
+}
+
+:deep(.n-radio) {
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+:deep(.n-radio:hover) {
+  background: rgba(102, 126, 234, 0.1);
+}

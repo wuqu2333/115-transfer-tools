@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- 背景 -->
+  <rect width="200" height="200" rx="30" fill="#0066FF"/>
+  
+  <!-- 115文字 -->
+  <text x="100" y="120" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle">
+    115
+  </text>
+  
+  <!-- 装饰性元素 - 云存储图标 -->
+  <g transform="translate(100, 40)">
+    <path d="M -20,-5 Q -25,-10 -20,-15 Q -15,-10 -10,-10 Q -5,-15 0,-15 Q 5,-15 10,-10 Q 15,-10 20,-15 Q 25,-10 20,-5 Z" fill="white" opacity="0.8"/>
+  </g>
+</svg>

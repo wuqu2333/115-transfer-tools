@@ -3,6 +3,9 @@ import path from "path";
 import { existsSync } from "fs";
 import { getSettings, insertTask, listTasks, getTask, updateTask, appendLog, deleteTask } from "../db";
 import { ok, fail } from "../helpers";
+import { refreshTreeFrom115 } from "../services/treeRefresh";
+import { transferQueue } from "../services/transferQueue";
+import { logger } from "../logger";
 
 export const router = Router();
 
@@ -42,9 +45,10 @@ function stopTaskInternal(id: number) {
     updated_at: now,
     message: "任务已终止",
     error_message: "任务已终止",
+    finished_at: now,
   };
-  if (task.status !== "running") patch.finished_at = now;
   updateTask(id, patch);
+  transferQueue.stopTask(id, "任务已终止");
   appendLog(id, "任务已终止");
   return getTask(id);
 }
@@ -59,6 +63,12 @@ function toTask(row: any) {
   return { ...row, logs };
 }
 
+function sendTaskSnapshot(res: any, limit: number) {
+  const payload = JSON.stringify(listTasks(limit).map(toTask));
+  res.write(`data: ${payload}\n\n`);
+  return payload;
+}
+
 router.post("/tasks", async (req, res) => {
   try {
     const settings = getSettings();
@@ -71,6 +81,15 @@ router.post("/tasks", async (req, res) => {
     const source_base = payload.source_base_path || settings.source_115_root_path || "/";
     const download_base = (payload.download_base_path || settings.download_base_path || "").trim();
     if (!download_base) return fail(res, 400, "请先配置本地下载目录或在任务中填写");
+
+    if (provider === "mobile" || provider === "sharepoint") {
+      try {
+        await refreshTreeFrom115(settings, source_paths, (msg) => logger.info(`[tree] ${msg}`));
+      } catch (e: any) {
+        logger.error({ err: e }, "[tree] 目录树生成失败");
+        return fail(res, 400, `目录树生成失败：${e?.message || "unknown error"}`);
+      }
+    }
 
     const created_at = new Date().toISOString();
     const local_root = path.resolve(download_base, `task_${Date.now()}`); // placeholder, will be replaced by id
@@ -126,6 +145,38 @@ router.post("/tasks/:id/stop", (req, res) => {
 router.get("/tasks", (req, res) => {
   const limit = Number(req.query.limit || 100);
   ok(res, listTasks(limit).map(toTask));
+});
+
+router.get("/tasks/stream", (req, res) => {
+  const limit = Number(req.query.limit || 120);
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write("retry: 2000\n\n");
+
+  let lastPayload = sendTaskSnapshot(res, limit);
+  const timer = setInterval(() => {
+    try {
+      const payload = JSON.stringify(listTasks(limit).map(toTask));
+      if (payload === lastPayload) {
+        res.write(": keep-alive\n\n");
+        return;
+      }
+      lastPayload = payload;
+      res.write(`data: ${payload}\n\n`);
+    } catch (e: any) {
+      logger.error({ err: e?.message || String(e) }, "tasks stream error");
+    }
+  }, 1500);
+
+  req.on("close", () => {
+    clearInterval(timer);
+    res.end();
+  });
 });
 
 router.get("/tasks/:id", (req, res) => {

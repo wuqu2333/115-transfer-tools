@@ -1,0 +1,124 @@
+/* 认证页面通用样式 */
+
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(145deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 0;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+
+.auth-title {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.auth-subtitle {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.8;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.auth-button {
+  margin-top: 8px;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.auth-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.auth-footer {
+  margin-top: 24px;
+  text-align: center;
+}
+
+/* 表单标签样式 */
+.auth-container :deep(.n-form-item-label) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* 输入框样式：固定高对比，避免认证页看不清输入内容 */
+.auth-container :deep(.n-input) {
+  --n-color: rgba(255, 255, 255, 0.95) !important;
+  --n-color-focus: #ffffff !important;
+  --n-color-disabled: rgba(241, 245, 249, 0.85) !important;
+  --n-text-color: #0f172a !important;
+  --n-text-color-disabled: #64748b !important;
+  --n-placeholder-color: #64748b !important;
+  --n-caret-color: #0f172a !important;
+  --n-icon-color: #475569 !important;
+  --n-icon-color-hover: #334155 !important;
+  --n-border: 1px solid rgba(148, 163, 184, 0.55) !important;
+  --n-border-hover: 1px solid rgba(71, 85, 105, 0.7) !important;
+  --n-border-focus: 1px solid #2563eb !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(37, 99, 235, 0.22) !important;
+  backdrop-filter: blur(2px);
+}
+
+.auth-container :deep(.n-input__input-el) {
+  color: #0f172a !important;
+  font-weight: 500;
+}
+
+.auth-container :deep(.n-input__textarea-el) {
+  color: #0f172a !important;
+}
+
+/* 占位符颜色 */
+.auth-container :deep(.n-input__placeholder) {
+  color: #64748b !important;
+}
+
+/* 输入框图标颜色（前缀+后缀） */
+.auth-container :deep(.n-input__prefix),
+.auth-container :deep(.n-input__suffix) {
+  color: #475569 !important;
+}
+
+/* 帮助文本 */
+.auth-help-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+}
+

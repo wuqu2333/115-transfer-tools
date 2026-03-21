@@ -73,7 +73,7 @@ try {
     catch { Write-Host "server.log is locked, appending instead." -ForegroundColor Yellow }
   }
 
-  $cmdArgs = "/c set ""STATIC_DIR=$staticDir"" && node dist/server.js >> server.log 2>&1"
+  $cmdArgs = "/c set ""STATIC_DIR=$staticDir"" && set ""NODE_OPTIONS=--max-old-space-size=1024"" && node dist/server.js >> server.log 2>&1"
   Start-Process -FilePath "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $backend -WindowStyle Hidden
   Start-Sleep -Seconds 1
 

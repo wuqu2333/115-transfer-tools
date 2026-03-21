@@ -6,4 +6,6 @@ frontend/dist/
 *.log
 backend-node/node_modules/
 backend-node/dist/
+_scan_*.py
+_tmp_*.py
 

@@ -1,8 +1,8 @@
 ﻿<script setup lang="ts">
-import { onMounted, reactive, ref, computed } from "vue";
+import { onMounted, reactive, ref, h } from "vue";
 import { request } from "../api/request";
 import { useSettingsStore } from "../stores/settings";
-import { Button, Card, Form, Input, InputNumber, Upload, Switch, message, Modal, Table } from "ant-design-vue";
+import { NButton, useMessage, type DataTableColumns, type UploadCustomRequestOptions } from "naive-ui";
 
 type RapidItem = { name: string; size: number; sha256: string };
 interface MobileItem {
@@ -52,6 +52,7 @@ const text = {
   pickerEnter: "进入",
 };
 
+const message = useMessage();
 const form = reactive({
   parent_file_id: "",
   text: "",
@@ -74,18 +75,21 @@ const pickerStack = ref<{ id: string; name: string }[]>([]);
 const pickerSelectedKeys = ref<string[]>([]);
 const pickerSelectedRows = ref<MobileItem[]>([]);
 
-const pickerColumns = [
-  { title: text.pickerName, dataIndex: "name" },
-  { title: text.pickerAction, dataIndex: "action", width: 120 },
-];
-
-const pickerRowSelection = computed(() => ({
-  selectedRowKeys: pickerSelectedKeys.value,
-  onChange: (keys: any[], rows: any[]) => {
-    pickerSelectedKeys.value = keys as string[];
-    pickerSelectedRows.value = rows as MobileItem[];
+const pickerColumns: DataTableColumns<MobileItem> = [
+  { type: "selection" },
+  { title: text.pickerName, key: "name" },
+  {
+    title: text.pickerAction,
+    key: "action",
+    width: 120,
+    render: (row) =>
+      h(
+        NButton,
+        { size: "tiny", onClick: () => pickerEnterDir(row) },
+        { default: () => text.pickerEnter },
+      ),
   },
-}));
+];
 
 const rootParentId = () => "/";
 const currentPickerId = () => {
@@ -195,28 +199,39 @@ async function submitItems(items: RapidItem[]) {
   message.success(text.submitOk);
 }
 
-const beforeUpload = async (file: File) => {
+async function handleImport(file: File, submitAfter: boolean) {
   const txt = await file.text();
-  try {
-    const items = prepareItems(txt);
-    form.text = items.map((i: RapidItem) => `${i.name}|${i.size}|${i.sha256}`).join("\n");
+  const items = prepareItems(txt);
+  form.text = items.map((i: RapidItem) => `${i.name}|${i.size}|${i.sha256}`).join("\n");
+  if (submitAfter) {
+    await submitItems(items);
+  } else {
     message.success(`已读取 ${items.length} 条`);
+  }
+}
+
+const importRequest = async ({ file, onFinish, onError }: UploadCustomRequestOptions) => {
+  try {
+    const raw = file.file as File | null | undefined;
+    if (!raw) throw new Error("读取文件失败");
+    await handleImport(raw, false);
+    onFinish();
   } catch (e: any) {
     message.error(e?.message || text.parseFail);
+    onError();
   }
-  return false;
 };
 
-const beforeUploadAndSubmit = async (file: File) => {
-  const txt = await file.text();
+const importAndSubmitRequest = async ({ file, onFinish, onError }: UploadCustomRequestOptions) => {
   try {
-    const items = prepareItems(txt);
-    form.text = items.map((i: RapidItem) => `${i.name}|${i.size}|${i.sha256}`).join("\n");
-    await submitItems(items);
+    const raw = file.file as File | null | undefined;
+    if (!raw) throw new Error("读取文件失败");
+    await handleImport(raw, true);
+    onFinish();
   } catch (e: any) {
     message.error(e?.message || text.parseFail);
+    onError();
   }
-  return false;
 };
 
 const submit = async () => {
@@ -234,11 +249,18 @@ async function loadMobileDirs(parentId: string) {
     const res: any = await request.post("/api/mobile/list", { parent_file_id: parentId });
     const items = Array.isArray(res?.items) ? res.items : [];
     pickerItems.value = items.filter((it: any) => it.is_dir);
+    updatePickerSelection(pickerSelectedKeys.value);
   } catch (e: any) {
     message.error(e?.message || text.exportFail);
   } finally {
     pickerLoading.value = false;
   }
+}
+
+function updatePickerSelection(keys: Array<string | number>) {
+  pickerSelectedKeys.value = keys as string[];
+  const keySet = new Set(pickerSelectedKeys.value);
+  pickerSelectedRows.value = pickerItems.value.filter((row) => keySet.has(row.file_id));
 }
 
 function openExportPicker() {
@@ -356,99 +378,101 @@ function clearExportDirs() {
 </script>
 
 <template>
-  <Card :title="text.title" :bordered="false">
-    <p class="tip">{{ text.tip }}</p>
-    <Form layout="vertical">
-      <Form.Item label="任务模式">
-        <div class="inline-row">
-          <Switch v-model:checked="asTask" />
-          <span class="hint">开启后写入任务记录并输出日志</span>
-        </div>
-      </Form.Item>
-      <Form.Item label="保留目录结构">
-        <Switch v-model:checked="keepDirs" />
-      </Form.Item>
-      <Form.Item label="并发数">
-        <div class="inline-row">
-          <InputNumber v-model:value="concurrency" :min="1" :max="16" :step="1" />
-          <span class="hint">建议 6-10，过高可能失败</span>
-        </div>
-      </Form.Item>
-      <Form.Item label="失败重试次数">
-        <div class="inline-row">
-          <InputNumber v-model:value="retryTimes" :min="1" :max="5" :step="1" />
-          <span class="hint">仅对网络/临时错误重试</span>
-        </div>
-      </Form.Item>
-      <Form.Item :label="text.parentLabel">
-        <Input v-model:value="form.parent_file_id" :placeholder="text.parentPlaceholder" />
-      </Form.Item>
-      <Form.Item :label="text.listLabel">
-        <Upload :before-upload="beforeUpload" :show-upload-list="false" accept=".json,.txt,.log">
-          <Button>{{ text.importBtn }}</Button>
-        </Upload>
-        <Upload :before-upload="beforeUploadAndSubmit" :show-upload-list="false" accept=".json,.txt,.log">
-          <Button style="margin-left: 8px">{{ text.importAndSubmit }}</Button>
-        </Upload>
-        <Input.TextArea v-model:value="form.text" :rows="8" :placeholder="text.example" />
-      </Form.Item>
-      <Button type="primary" @click="submit">{{ text.submitBtn }}</Button>
-    </Form>
-    <Card size="small" :title="text.exportTitle" style="margin-top: 12px">
-      <p class="tip">{{ text.exportTip }}</p>
-      <Form layout="vertical">
-        <Form.Item :label="text.exportDirLabel">
-          <div class="selected-box">
-            <span v-for="d in exportDirs" :key="d.id" class="pill">
-              {{ d.path }}
-              <button @click="removeExportDir(d.id)">x</button>
-            </span>
-            <span v-if="!exportDirs.length" class="hint">{{ text.exportDirPlaceholder }}</span>
-          </div>
-          <div class="inline-row" style="margin-top: 8px">
-            <Button @click="openExportPicker">{{ text.exportSelectDir }}</Button>
-            <Button @click="clearExportDirs">{{ text.exportClearDir }}</Button>
-          </div>
-        </Form.Item>
-        <Form.Item :label="text.exportConcurrencyLabel">
+  <div class="page-stack">
+    <n-card :title="text.title" :bordered="false" class="page-card">
+      <p class="tip">{{ text.tip }}</p>
+      <n-form label-placement="top">
+        <n-form-item label="任务模式">
           <div class="inline-row">
-            <InputNumber v-model:value="exportConcurrency" :min="1" :max="16" :step="1" />
-            <span class="hint">{{ text.exportConcurrencyHint }}</span>
+            <n-switch v-model:value="asTask" />
+            <span class="hint">开启后写入任务记录并输出日志</span>
           </div>
-        </Form.Item>
-        <Button type="primary" :loading="exporting" @click="exportSha256">{{ text.exportBtn }}</Button>
-      </Form>
-    </Card>
-    <pre class="result" v-if="resultText">{{ resultText }}</pre>
-  </Card>
+        </n-form-item>
+        <n-form-item label="保留目录结构">
+          <n-switch v-model:value="keepDirs" />
+        </n-form-item>
+        <n-form-item label="并发数">
+          <div class="inline-row">
+            <n-input-number v-model:value="concurrency" :min="1" :max="16" :step="1" />
+            <span class="hint">建议 6-10，过高可能失败</span>
+          </div>
+        </n-form-item>
+        <n-form-item label="失败重试次数">
+          <div class="inline-row">
+            <n-input-number v-model:value="retryTimes" :min="1" :max="5" :step="1" />
+            <span class="hint">仅对网络/临时错误重试</span>
+          </div>
+        </n-form-item>
+        <n-form-item :label="text.parentLabel">
+          <n-input v-model:value="form.parent_file_id" :placeholder="text.parentPlaceholder" />
+        </n-form-item>
+        <n-form-item :label="text.listLabel">
+          <div class="inline-row">
+            <n-upload :custom-request="importRequest" :show-file-list="false" accept=".json,.txt,.log">
+              <n-button>{{ text.importBtn }}</n-button>
+            </n-upload>
+            <n-upload :custom-request="importAndSubmitRequest" :show-file-list="false" accept=".json,.txt,.log">
+              <n-button>{{ text.importAndSubmit }}</n-button>
+            </n-upload>
+          </div>
+          <n-input
+            v-model:value="form.text"
+            type="textarea"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+            :placeholder="text.example"
+          />
+        </n-form-item>
+        <n-button type="primary" @click="submit">{{ text.submitBtn }}</n-button>
+      </n-form>
 
-  <Modal v-model:open="pickerVisible" :title="text.pickerTitle" :footer="null" width="720">
-    <div class="picker-bar">
-      <Input :value="currentPickerPath()" :placeholder="text.pickerPath" readonly />
-      <Button @click="pickerGoParent">{{ text.pickerParent }}</Button>
-      <Button @click="pickerChooseCurrent">{{ text.pickerChoose }}</Button>
-      <Button type="primary" @click="pickerAddSelected">{{ text.pickerAddSelected }}</Button>
-    </div>
-    <Table
-      :columns="pickerColumns"
-      :data-source="pickerItems"
-      :loading="pickerLoading"
-      row-key="file_id"
-      size="small"
-      :pagination="false"
-      :row-selection="pickerRowSelection"
-      :customRow="(record) => ({ onDblclick: () => (record as any).is_dir && pickerEnterDir(record as any) })"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.dataIndex === 'action'">
-          <Button size="small" @click="() => pickerEnterDir(record as any)">{{ text.pickerEnter }}</Button>
-        </template>
-        <template v-else>
-          {{ (record as any).name }}
-        </template>
-      </template>
-    </Table>
-  </Modal>
+      <n-card size="small" :title="text.exportTitle" style="margin-top: 12px">
+        <p class="tip">{{ text.exportTip }}</p>
+        <n-form label-placement="top">
+          <n-form-item :label="text.exportDirLabel">
+            <div class="selected-box">
+              <n-tag v-for="d in exportDirs" :key="d.id" closable size="small" @close="removeExportDir(d.id)">
+                {{ d.path }}
+              </n-tag>
+              <span v-if="!exportDirs.length" class="hint">{{ text.exportDirPlaceholder }}</span>
+            </div>
+            <div class="inline-row" style="margin-top: 8px">
+              <n-button @click="openExportPicker">{{ text.exportSelectDir }}</n-button>
+              <n-button @click="clearExportDirs">{{ text.exportClearDir }}</n-button>
+            </div>
+          </n-form-item>
+          <n-form-item :label="text.exportConcurrencyLabel">
+            <div class="inline-row">
+              <n-input-number v-model:value="exportConcurrency" :min="1" :max="16" :step="1" />
+              <span class="hint">{{ text.exportConcurrencyHint }}</span>
+            </div>
+          </n-form-item>
+          <n-button type="primary" :loading="exporting" @click="exportSha256">{{ text.exportBtn }}</n-button>
+        </n-form>
+      </n-card>
+
+      <pre class="result" v-if="resultText">{{ resultText }}</pre>
+    </n-card>
+
+    <n-modal v-model:show="pickerVisible" preset="card" :title="text.pickerTitle" style="width: 720px">
+      <div class="picker-bar">
+        <n-input :value="currentPickerPath()" :placeholder="text.pickerPath" readonly />
+        <n-button @click="pickerGoParent">{{ text.pickerParent }}</n-button>
+        <n-button @click="pickerChooseCurrent">{{ text.pickerChoose }}</n-button>
+        <n-button type="primary" @click="pickerAddSelected">{{ text.pickerAddSelected }}</n-button>
+      </div>
+      <n-data-table
+        :columns="pickerColumns"
+        :data="pickerItems"
+        :loading="pickerLoading"
+        :pagination="false"
+        :row-key="(row: MobileItem) => row.file_id"
+        :row-props="(row: MobileItem) => ({ onDblclick: () => row.is_dir && pickerEnterDir(row) })"
+        :checked-row-keys="pickerSelectedKeys"
+        @update:checked-row-keys="updatePickerSelection"
+        size="small"
+      />
+    </n-modal>
+  </div>
 </template>
 
 <style scoped>
@@ -470,6 +494,7 @@ function clearExportDirs() {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .hint {
   font-size: 12px;
@@ -479,25 +504,7 @@ function clearExportDirs() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.pill {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  background: var(--panel-2);
-}
-.pill button {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #ffffff;
-  cursor: pointer;
-  line-height: 16px;
-  font-size: 12px;
 }
 .picker-bar {
   display: grid;

@@ -1,5 +1,5 @@
 ﻿import { Router } from "express";
-import { getSettings } from "../db";
+import { getSettings, updateSettings } from "../db";
 import { OpenListClient } from "../clients/openlist";
 import { ok, fail } from "../helpers";
 
@@ -50,9 +50,10 @@ function collectDebugHashes(item: any) {
 router.post("/openlist/login", async (req, res) => {
   try {
     const settings = getSettings();
-    const { username, password } = req.body || {};
-    if (!settings.openlist_base_url) return fail(res, 400, "请先配置 OpenList 地址");
-    const token = await new OpenListClient(settings.openlist_base_url, "", "").login(username, password);
+    const { username, password, openlist_base_url } = req.body || {};
+    const baseUrl = openlist_base_url || settings.openlist_base_url;
+    if (!baseUrl) return fail(res, 400, "请先配置 OpenList 地址");
+    const token = await new OpenListClient(baseUrl, "", "").login(username, password);
     ok(res, { token });
   } catch (e: any) {
     fail(res, 400, e.message, e.message);
@@ -62,10 +63,65 @@ router.post("/openlist/login", async (req, res) => {
 router.post("/openlist/list", async (req, res) => {
   try {
     const settings = getSettings();
-    const { path = "/", refresh = false, page = 1, per_page = 0, password } = req.body || {};
-    if (!settings.openlist_base_url || !settings.openlist_token) return fail(res, 400, "OpenList 未配置");
-    const client = new OpenListClient(settings.openlist_base_url, settings.openlist_token, password || settings.openlist_password);
-    const data = await client.list(path, refresh, page, per_page);
+    const {
+      path = "/",
+      refresh = false,
+      page = 1,
+      per_page = 0,
+      password,
+      openlist_base_url,
+      openlist_token,
+      openlist_password,
+    } = req.body || {};
+    const baseUrl = openlist_base_url || settings.openlist_base_url;
+    let token = openlist_token || settings.openlist_token;
+    const pass = password || openlist_password || settings.openlist_password;
+    const username = req.body?.openlist_username || settings.openlist_username;
+    const loginPassword = req.body?.openlist_login_password || settings.openlist_login_password;
+    if (!baseUrl) return fail(res, 400, "OpenList 未配置，请先保存或填写");
+
+    const tryLogin = async () => {
+      if (!username || !loginPassword) return "";
+      const newToken = await new OpenListClient(baseUrl, "", "").login(username, loginPassword);
+      updateSettings({
+        openlist_base_url: baseUrl,
+        openlist_token: newToken,
+        openlist_username: username,
+        openlist_login_password: loginPassword,
+      });
+      return newToken;
+    };
+
+    if (!token) {
+      token = await tryLogin();
+    }
+    if (!token) return fail(res, 400, "OpenList Token 为空，请填写 Token 或账号密码");
+
+    const runList = async (t: string) => {
+      const client = new OpenListClient(baseUrl, t, pass);
+      return await client.list(path, refresh, page, per_page);
+    };
+
+    let data: any;
+    try {
+      data = await runList(token);
+    } catch (e: any) {
+      const msg = String(e?.message || "").toLowerCase();
+      const isExpired =
+        msg.includes("token") && (msg.includes("expired") || msg.includes("invalid") || msg.includes("过期"));
+      if (isExpired) {
+        const newToken = await tryLogin();
+        if (newToken) {
+          token = newToken;
+          data = await runList(token);
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
+    const client = new OpenListClient(baseUrl, token, pass);
     const current = client.normalize(path);
     const content = (data.content || []).map((item: any) => ({
       name: item.name,

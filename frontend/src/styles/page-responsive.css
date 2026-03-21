@@ -1,0 +1,196 @@
+/* 页面级统一响应式工具样式 */
+
+:root {
+  --touch-target-size: 44px;
+  --page-mobile-gap: 12px;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+:is(
+  .dashboard-page,
+  .datasources-page,
+  .mappings-page,
+  .tasks-page,
+  .settings-page,
+  .logs-page,
+  .share-mappings-page,
+  .api-docs-page
+) {
+  width: 100%;
+  min-width: 0;
+}
+
+.card-header-center {
+  width: 100%;
+  max-width: 100%;
+}
+
+.card-title-center {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.card-description-center {
+  max-width: 100%;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.page-header-actions,
+.responsive-toolbar,
+.responsive-pagination,
+.responsive-pagination-meta {
+  width: 100%;
+  max-width: 100%;
+}
+
+.page-header-actions > div,
+.responsive-toolbar > div,
+.responsive-pagination > div,
+.responsive-pagination-meta > div {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  :is(
+    .dashboard-page,
+    .datasources-page,
+    .mappings-page,
+    .tasks-page,
+    .settings-page,
+    .logs-page,
+    .share-mappings-page,
+    .api-docs-page
+  ) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  :is(
+    .dashboard-page,
+    .datasources-page,
+    .mappings-page,
+    .tasks-page,
+    .settings-page,
+    .logs-page,
+    .share-mappings-page,
+    .api-docs-page
+  ) .n-card-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px;
+  }
+
+  :is(
+    .dashboard-page,
+    .datasources-page,
+    .mappings-page,
+    .tasks-page,
+    .settings-page,
+    .logs-page,
+    .share-mappings-page,
+    .api-docs-page
+  ) .n-card-header__main,
+  :is(
+    .dashboard-page,
+    .datasources-page,
+    .mappings-page,
+    .tasks-page,
+    .settings-page,
+    .logs-page,
+    .share-mappings-page,
+    .api-docs-page
+  ) .n-card-header__extra {
+    width: 100%;
+    min-width: 0;
+  }
+
+  :is(
+    .dashboard-page,
+    .datasources-page,
+    .mappings-page,
+    .tasks-page,
+    .settings-page,
+    .logs-page,
+    .share-mappings-page,
+    .api-docs-page
+  ) .n-card-header__extra {
+    margin-left: 0 !important;
+  }
+
+  .card-header-center {
+    padding: 4px 0 0;
+    text-align: left;
+  }
+
+  .card-title-center {
+    font-size: clamp(22px, 7vw, 28px) !important;
+  }
+
+  .card-description-center {
+    font-size: 14px !important;
+  }
+
+  .page-header-actions.n-space,
+  .responsive-toolbar.n-space,
+  .responsive-pagination.n-space,
+  .responsive-pagination-meta.n-space {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: var(--page-mobile-gap) !important;
+  }
+
+  .page-header-actions.n-space > div,
+  .responsive-toolbar.n-space > div,
+  .responsive-pagination.n-space > div,
+  .responsive-pagination-meta.n-space > div {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .page-header-actions .n-button,
+  .page-header-actions .n-dropdown,
+  .responsive-toolbar .n-button,
+  .responsive-toolbar .n-select,
+  .responsive-toolbar .n-input,
+  .responsive-toolbar .n-date-picker,
+  .responsive-toolbar .n-cascader,
+  .responsive-toolbar .n-auto-complete,
+  .responsive-toolbar .n-input-number,
+  .responsive-pagination .n-pagination,
+  .responsive-pagination-meta .n-select {
+    width: 100% !important;
+  }
+
+  .page-header-actions .n-button,
+  .responsive-toolbar .n-button {
+    min-height: var(--touch-target-size);
+    justify-content: center;
+  }
+
+  .responsive-pagination .n-pagination {
+    justify-content: flex-start;
+  }
+
+  .api-docs-header {
+    padding: 0 !important;
+  }
+
+  .api-docs-header .card-header-center {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    text-align: left;
+  }
+
+  .api-docs-header-extra {
+    width: 100%;
+  }
+}

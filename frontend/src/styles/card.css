@@ -1,0 +1,108 @@
+/**
+ * 卡片样式
+ */
+
+.modern-card {
+  border-radius: 24px !important;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(102, 126, 234, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-card:hover {
+  box-shadow: 0 12px 48px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.card-header-center {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.card-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-title-center {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Emoji 图标恢复原色，不受渐变文字效果影响 */
+.title-emoji {
+  -webkit-text-fill-color: initial !important;
+  color: initial !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.card-description {
+  font-size: 14px;
+  color: #666;
+  margin: 4px 0 0 0;
+}
+
+.card-description-center {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+.dark .card-description,
+.dark .card-description-center {
+  color: #999;
+}
+
+/* 玻璃模糊卡片 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card-animated {
+  animation: fadeIn 0.3s ease-out;
+}
+

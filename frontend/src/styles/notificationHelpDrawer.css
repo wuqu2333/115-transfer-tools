@@ -1,0 +1,460 @@
+/* 通知帮助抽屉样式 */
+
+.help-drawer-content {
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
+  min-height: 100%;
+}
+
+.help-section {
+  margin-bottom: 32px;
+}
+
+.help-section:last-child {
+  margin-bottom: 0;
+}
+
+.help-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--n-text-color);
+}
+
+.help-section-title::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  border-radius: 2px;
+}
+
+/* 描述区域 */
+.help-description {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  line-height: 1.6;
+  color: var(--n-text-color);
+}
+
+/* 步骤列表 */
+.help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-step {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.help-step:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateX(4px);
+}
+
+.help-step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.help-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.help-step-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--n-text-color);
+  flex: 1;
+  margin-top: 2px;
+}
+
+.help-step-content {
+  margin-left: 40px;
+  color: var(--n-text-color-2);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.help-step-code {
+  margin-top: 12px;
+  margin-left: 40px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  color: #a6e3a1;
+}
+
+/* 文档链接列表 */
+.help-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help-doc-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.help-doc-link:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateX(4px);
+}
+
+.help-doc-icon {
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.help-doc-content {
+  flex: 1;
+}
+
+.help-doc-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #6366f1;
+  margin-bottom: 4px;
+}
+
+.help-doc-link:hover .help-doc-title {
+  color: #a855f7;
+}
+
+.help-doc-desc {
+  font-size: 13px;
+  color: var(--n-text-color-3);
+  line-height: 1.5;
+}
+
+.help-doc-url {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  word-break: break-all;
+  margin-top: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.help-doc-external {
+  font-size: 16px;
+  color: var(--n-text-color-3);
+  transition: color 0.3s ease;
+}
+
+.help-doc-link:hover .help-doc-external {
+  color: #6366f1;
+}
+
+/* 配置示例 */
+.help-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-example {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.help-example-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--n-text-color);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-example-title::before {
+  content: '💡';
+  font-size: 16px;
+}
+
+.help-example-desc {
+  font-size: 13px;
+  color: var(--n-text-color-3);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.help-example-code {
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #a6e3a1;
+  line-height: 1.6;
+}
+
+/* 常见问题 */
+.help-faqs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-faq {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.help-faq:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.help-faq-question {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--n-text-color);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.help-faq-question::before {
+  content: 'Q:';
+  color: #a855f7;
+  font-weight: 700;
+  min-width: 20px;
+}
+
+.help-faq-answer {
+  font-size: 14px;
+  color: var(--n-text-color-2);
+  line-height: 1.6;
+  padding-left: 28px;
+  position: relative;
+}
+
+.help-faq-answer::before {
+  content: 'A:';
+  color: #6366f1;
+  font-weight: 700;
+  position: absolute;
+  left: 0;
+}
+
+/* 折叠菜单样式优化 - 现代化设计 */
+.help-drawer-content :deep(.n-collapse) {
+  background: transparent;
+  border: none;
+}
+
+.help-drawer-content :deep(.n-collapse-item) {
+  margin-bottom: 16px;
+  border: none;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-drawer-content :deep(.n-collapse-item:hover) {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.1);
+  transform: translateY(-2px);
+}
+
+.help-drawer-content :deep(.n-collapse-item__header) {
+  padding: 18px 20px;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--n-text-color);
+  background: transparent;
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.help-drawer-content :deep(.n-collapse-item__header::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  border-radius: 0 4px 4px 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.help-drawer-content :deep(.n-collapse-item__header:hover) {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.help-drawer-content :deep(.n-collapse-item__header:hover::before) {
+  opacity: 1;
+}
+
+.help-drawer-content :deep(.n-collapse-item__header--active) {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.help-drawer-content :deep(.n-collapse-item__header--active::before) {
+  opacity: 1;
+}
+
+.help-drawer-content :deep(.n-collapse-item__content-wrapper) {
+  padding: 0 20px 20px 20px;
+  background: transparent;
+  border-radius: 0 0 16px 16px;
+}
+
+.help-drawer-content :deep(.n-collapse-item__content-inner) {
+  padding: 0;
+}
+
+/* 子选项内容样式优化 */
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-step),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-example),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-faq),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-doc-link) {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-step:hover),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-example:hover),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-faq:hover),
+.help-drawer-content :deep(.n-collapse-item__content-wrapper .help-doc-link:hover) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(99, 102, 241, 0.2);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+}
+
+/* 空状态 */
+.help-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--n-text-color-3);
+}
+
+.help-empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.help-empty-text {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.help-empty-hint {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .help-drawer-content {
+    padding: 16px;
+  }
+
+  .help-section-title {
+    font-size: 16px;
+  }
+
+  .help-step-content,
+  .help-step-code {
+    margin-left: 0;
+    margin-top: 12px;
+  }
+
+  .help-step-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .help-faq-answer {
+    padding-left: 0;
+    margin-top: 8px;
+  }
+
+  .help-faq-answer::before {
+    position: static;
+    display: block;
+    margin-bottom: 4px;
+  }
+}
+
+/* 暗色主题优化 */
+@media (prefers-color-scheme: dark) {
+  .help-description {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .help-step,
+  .help-example,
+  .help-faq,
+  .help-doc-link {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .help-step:hover,
+  .help-faq:hover {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .help-doc-link:hover {
+    background: rgba(99, 102, 241, 0.2);
+  }
+}

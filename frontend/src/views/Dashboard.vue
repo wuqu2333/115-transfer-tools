@@ -1,4 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+import { onMounted, ref } from "vue";
+import { request } from "../api/request";
+
 const text = {
   eyebrow: "115 -> 世纪互联 / 移动云盘",
   title: "自动转存控制台",
@@ -21,13 +24,100 @@ const text = {
     browserDesc: "选择 115 路径，批量入列",
     rapidTitle: "秒传导入",
     rapidDesc: "粘贴或导入 JSON 清单，一键秒传",
+    settingsTitle: "基础设置",
+    settingsDesc: "连接信息与参数配置",
   },
 };
+
+const storageLoading = ref(false);
+const storageError = ref("");
+const storageItems = ref<any[]>([]);
+const storageUpdatedAt = ref("");
+const metricsLoading = ref(false);
+const metricsError = ref("");
+const metrics = ref<any>(null);
+
+function formatTB(bytes?: number | null) {
+  if (!bytes || bytes <= 0) return "0.00TB";
+  const tb = bytes / 1024 ** 4;
+  return `${tb.toFixed(2)}TB`;
+}
+
+function formatGB(bytes?: number | null) {
+  if (!bytes || bytes <= 0) return "0.00GB";
+  const gb = bytes / 1024 ** 3;
+  return `${gb.toFixed(2)}GB`;
+}
+
+function getItem(type: string) {
+  return storageItems.value.find((it: any) => it?.type === type);
+}
+
+function usagePercent(item: any) {
+  if (!item || !item.total || item.total <= 0 || item.used === null || item.used === undefined) return null;
+  const pct = Math.round((Number(item.used) / Number(item.total)) * 100);
+  return Math.min(100, Math.max(0, pct));
+}
+
+function formatUsage(item: any) {
+  if (!item) return "未找到挂载点";
+  if (item.status === "missing") return item.message || "未配置";
+  if (item.status === "error") return item.message || "获取失败";
+  if (item.total === null && item.used === null) return "未能获取空间";
+  if (item.total === null || item.total === undefined) {
+    return `${formatTB(item.used)} / 未知`;
+  }
+  if (item.used === null || item.used === undefined) {
+    return `未知 / ${formatTB(item.total)}`;
+  }
+  const pct = usagePercent(item);
+  const pctLabel = pct === null ? "" : ` (${pct}%)`;
+  return `${formatTB(item.used)} / ${formatTB(item.total)}${pctLabel}`;
+}
+
+function formatTime(value: string) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
+async function loadStorage() {
+  storageLoading.value = true;
+  storageError.value = "";
+  try {
+    const res: any = await request.get("/api/system/storage");
+    storageItems.value = Array.isArray(res?.items) ? res.items : [];
+    storageUpdatedAt.value = res?.updated_at || "";
+  } catch (e: any) {
+    storageError.value = e?.message || "获取空间信息失败";
+  } finally {
+    storageLoading.value = false;
+  }
+}
+
+async function loadMetrics() {
+  metricsLoading.value = true;
+  metricsError.value = "";
+  try {
+    const res: any = await request.get("/api/system/metrics");
+    metrics.value = res || null;
+  } catch (e: any) {
+    metricsError.value = e?.message || "获取系统信息失败";
+  } finally {
+    metricsLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  loadStorage();
+  loadMetrics();
+});
 </script>
 
 <template>
-  <div class="dashboard">
-    <a-card :bordered="false" class="hero-card">
+  <div class="page-stack">
+    <n-card class="modern-card hero-card" :bordered="false">
       <div class="hero-content">
         <div>
           <p class="eyebrow">{{ text.eyebrow }}</p>
@@ -35,13 +125,13 @@ const text = {
           <p class="desc">{{ text.desc }}</p>
           <div class="hero-actions">
             <router-link to="/settings">
-              <a-button type="primary">{{ text.actions.settings }}</a-button>
+              <n-button type="primary">{{ text.actions.settings }}</n-button>
             </router-link>
             <router-link to="/browser">
-              <a-button>{{ text.actions.browser }}</a-button>
+              <n-button secondary>{{ text.actions.browser }}</n-button>
             </router-link>
             <router-link to="/rapid">
-              <a-button type="default">{{ text.actions.rapid }}</a-button>
+              <n-button>{{ text.actions.rapid }}</n-button>
             </router-link>
           </div>
         </div>
@@ -56,42 +146,116 @@ const text = {
           </div>
         </div>
       </div>
-    </a-card>
+    </n-card>
+
+    <n-card class="modern-card storage-card" :bordered="false">
+      <div class="storage-header">
+        <h3>网盘空间</h3>
+        <div class="storage-actions">
+          <n-button size="tiny" secondary :loading="storageLoading" @click="loadStorage">刷新</n-button>
+        </div>
+      </div>
+      <div class="storage-grid">
+        <div class="storage-item">
+          <span>115 网盘</span>
+          <strong>{{ formatUsage(getItem("115")) }}</strong>
+          <n-progress
+            v-if="usagePercent(getItem('115')) !== null"
+            type="line"
+            :percentage="usagePercent(getItem('115')) || 0"
+            :show-indicator="false"
+            :height="6"
+          />
+        </div>
+        <div class="storage-item">
+          <span>世纪互联</span>
+          <strong>{{ formatUsage(getItem("sharepoint")) }}</strong>
+          <n-progress
+            v-if="usagePercent(getItem('sharepoint')) !== null"
+            type="line"
+            :percentage="usagePercent(getItem('sharepoint')) || 0"
+            :show-indicator="false"
+            :height="6"
+          />
+        </div>
+      </div>
+      <div v-if="storageUpdatedAt" class="storage-meta">
+        更新时间：{{ formatTime(storageUpdatedAt) }}
+      </div>
+      <div v-if="storageError" class="storage-meta storage-error">
+        {{ storageError }}
+      </div>
+    </n-card>
+
+    <n-card class="modern-card metrics-card" :bordered="false">
+      <div class="storage-header">
+        <h3>系统资源</h3>
+        <div class="storage-actions">
+          <n-button size="tiny" secondary :loading="metricsLoading" @click="loadMetrics">刷新</n-button>
+        </div>
+      </div>
+      <div class="storage-grid">
+        <div class="storage-item">
+          <span>CPU</span>
+          <strong>{{ metrics?.cpu ? metrics.cpu.usage_percent + "%" : "-" }}</strong>
+        </div>
+        <div class="storage-item">
+          <span>内存</span>
+          <strong v-if="metrics?.memory">
+            {{ formatGB(metrics.memory.used) }} / {{ formatGB(metrics.memory.total) }}
+            ({{ metrics.memory.usage_percent }}%)
+          </strong>
+          <strong v-else>-</strong>
+        </div>
+        <div class="storage-item">
+          <span>磁盘</span>
+          <strong v-if="metrics?.disk">
+            {{ formatGB(metrics.disk.used) }} / {{ formatGB(metrics.disk.total) }}
+            ({{ metrics.disk.usage_percent }}%)
+          </strong>
+          <strong v-else>-</strong>
+        </div>
+      </div>
+      <div v-if="metricsError" class="storage-meta storage-error">
+        {{ metricsError }}
+      </div>
+    </n-card>
 
     <div class="grid">
       <router-link to="/tasks">
-        <a-card hoverable>
+        <n-card class="modern-card quick-card" :bordered="false">
           <h3>{{ text.cards.tasksTitle }}</h3>
           <p>{{ text.cards.tasksDesc }}</p>
-        </a-card>
+        </n-card>
       </router-link>
       <router-link to="/browser">
-        <a-card hoverable>
+        <n-card class="modern-card quick-card" :bordered="false">
           <h3>{{ text.cards.browserTitle }}</h3>
           <p>{{ text.cards.browserDesc }}</p>
-        </a-card>
+        </n-card>
       </router-link>
       <router-link to="/rapid">
-        <a-card hoverable>
+        <n-card class="modern-card quick-card" :bordered="false">
           <h3>{{ text.cards.rapidTitle }}</h3>
           <p>{{ text.cards.rapidDesc }}</p>
-        </a-card>
+        </n-card>
+      </router-link>
+      <router-link to="/settings">
+        <n-card class="modern-card quick-card" :bordered="false">
+          <h3>{{ text.cards.settingsTitle }}</h3>
+          <p>{{ text.cards.settingsDesc }}</p>
+        </n-card>
       </router-link>
     </div>
   </div>
 </template>
 
 <style scoped>
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .hero-card {
   position: relative;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(37, 99, 235, 0.16));
-  border: 1px solid var(--border);
+  border: 1px solid var(--ui-border-light);
 }
 .hero-card::before {
   content: "";
@@ -116,7 +280,7 @@ const text = {
   letter-spacing: 0.01em;
 }
 .desc {
-  color: var(--muted);
+  color: var(--ui-text-secondary-light);
   margin: 0;
   max-width: 520px;
 }
@@ -133,13 +297,13 @@ const text = {
 }
 .stat {
   background: rgba(255, 255, 255, 0.8);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ui-border-light);
   border-radius: 14px;
   padding: 12px 14px;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--ui-shadow-card);
 }
 .stat span {
-  color: var(--muted);
+  color: var(--ui-text-secondary-light);
   font-size: 12px;
 }
 .stat strong {
@@ -152,7 +316,7 @@ const text = {
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent-2);
+  color: var(--ui-accent);
   font-weight: 600;
 }
 .grid {
@@ -160,15 +324,57 @@ const text = {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
+.storage-card {
+  border: 1px solid var(--ui-border-light);
+  background: rgba(255, 255, 255, 0.88);
+}
+.storage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.storage-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.storage-actions {
+  display: flex;
+  gap: 8px;
+}
+.storage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.storage-item {
+  border: 1px solid var(--ui-border-light);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.7);
+  display: grid;
+  gap: 8px;
+}
+.storage-item span {
+  font-size: 12px;
+  color: var(--ui-text-secondary-light);
+}
+.storage-item strong {
+  font-size: 14px;
+}
+.storage-meta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ui-text-secondary-light);
+}
+.storage-error {
+  color: #b42318;
+}
+.quick-card p {
+  color: var(--ui-text-secondary-light);
+}
 a {
   text-decoration: none;
-}
-:deep(.ant-card) {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-:deep(.ant-card:hover) {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-1);
 }
 @media (max-width: 960px) {
   .hero-content {
@@ -181,4 +387,3 @@ a {
   }
 }
 </style>
-

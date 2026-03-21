@@ -1,0 +1,29 @@
+/* API Token Tab 样式 */
+.api-tokens-tab {
+  padding: 0;
+}
+
+.api-tokens-tab .header-actions {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.token-table {
+  margin-top: 20px;
+}
+
+.token-display {
+  padding: 8px 0;
+}
+
+.token-input {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.add-btn {
+  backdrop-filter: blur(8px);
+}
+

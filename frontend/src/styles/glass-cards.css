@@ -1,0 +1,209 @@
+/**
+ * 全局玻璃态卡片样式
+ * 统一应用到所有页面
+ */
+
+/* 主卡片 - 玻璃态效果 */
+.modern-card {
+  border-radius: 20px !important;
+  background: var(--ui-glass-light) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid var(--ui-border-light) !important;
+  box-shadow:
+    var(--ui-shadow-card),
+    0 1px 3px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.modern-card:hover {
+  background: color-mix(in srgb, var(--ui-glass-light) 86%, #ffffff 14%) !important;
+  box-shadow: 
+    0 12px 48px rgba(0, 0, 0, 0.14),
+    0 2px 6px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  transform: translateY(-2px);
+}
+
+/* 暗色模式 */
+.dark .modern-card {
+  background: var(--ui-glass-dark) !important;
+  border: 1px solid var(--ui-border-dark) !important;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+.dark .modern-card:hover {
+  background: color-mix(in srgb, var(--ui-glass-dark) 90%, #121212 10%) !important;
+  box-shadow: 
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 子卡片 / 列表项 - 玻璃态效果 */
+.glass-card,
+.datasource-card,
+.mapping-card,
+.task-card {
+  background: color-mix(in srgb, var(--ui-glass-light) 82%, #ffffff 18%) !important;
+  backdrop-filter: blur(16px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+  border-radius: 16px !important;
+  border: 2px solid var(--ui-border-light) !important;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.glass-card:hover,
+.datasource-card:hover,
+.mapping-card:hover,
+.task-card:hover {
+  background: color-mix(in srgb, var(--ui-glass-light) 76%, #ffffff 24%) !important;
+  box-shadow: 
+    0 12px 40px var(--ui-accent-soft),
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--ui-accent) 55%, #ffffff 45%) !important;
+}
+
+/* 暗色模式 - 子卡片 */
+.dark .glass-card,
+.dark .datasource-card,
+.dark .mapping-card,
+.dark .task-card {
+  background: color-mix(in srgb, var(--ui-glass-dark) 88%, #1d1d1d 12%) !important;
+  border-color: var(--ui-border-dark) !important;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+.dark .glass-card:hover,
+.dark .datasource-card:hover,
+.dark .mapping-card:hover,
+.dark .task-card:hover {
+  background: color-mix(in srgb, var(--ui-glass-dark) 82%, #111 18%) !important;
+  box-shadow: 
+    0 12px 40px color-mix(in srgb, var(--ui-accent) 36%, #000 64%),
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 模态框 / 弹窗 - 玻璃态效果 */
+.n-modal .n-card {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 
+    0 16px 64px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.dark .n-modal .n-card {
+  background: rgba(25, 25, 25, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 
+    0 16px 64px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 表单输入框 - 玻璃态效果 */
+.n-input,
+.n-select,
+.n-input-number {
+  background: rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid var(--ui-accent-soft) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+.n-input:hover,
+.n-select:hover,
+.n-input-number:hover {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border-color: color-mix(in srgb, var(--ui-accent) 40%, #ffffff 60%) !important;
+}
+
+.n-input:focus-within,
+.n-select:focus-within,
+.n-input-number:focus-within {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-color: color-mix(in srgb, var(--ui-accent) 62%, #ffffff 38%) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent-soft) 75%, transparent 25%) !important;
+}
+
+.dark .n-input,
+.dark .n-select,
+.dark .n-input-number {
+  background: rgba(40, 40, 40, 0.5) !important;
+  border-color: color-mix(in srgb, var(--ui-accent) 22%, #000 78%) !important;
+}
+
+.dark .n-input:hover,
+.dark .n-select:hover,
+.dark .n-input-number:hover {
+  background: rgba(50, 50, 50, 0.65) !important;
+  border-color: color-mix(in srgb, var(--ui-accent) 35%, #000 65%) !important;
+}
+
+.dark .n-input:focus-within,
+.dark .n-select:focus-within,
+.dark .n-input-number:focus-within {
+  background: rgba(60, 60, 60, 0.75) !important;
+  border-color: color-mix(in srgb, var(--ui-accent) 58%, #000 42%) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 20%, transparent 80%) !important;
+}
+
+/* 数据表格 - 玻璃态效果 */
+.n-data-table {
+  background: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.dark .n-data-table {
+  background: rgba(30, 30, 30, 0.4) !important;
+}
+
+/* 数据表格行悬停 */
+.n-data-table .n-data-table-tr:hover {
+  background: color-mix(in srgb, var(--ui-accent-soft) 70%, transparent 30%) !important;
+}
+
+.dark .n-data-table .n-data-table-tr:hover {
+  background: color-mix(in srgb, var(--ui-accent) 16%, transparent 84%) !important;
+}
+
+/* 按钮 - 玻璃态效果 */
+.n-button {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+.n-button--primary-type {
+  background: color-mix(in srgb, var(--ui-accent) 88%, #ffffff 12%) !important;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 55%, #ffffff 45%) !important;
+}
+
+.n-button--primary-type:hover {
+  background: var(--ui-accent-strong) !important;
+  box-shadow: 0 4px 16px var(--ui-accent-soft) !important;
+  transform: translateY(-1px);
+}
+

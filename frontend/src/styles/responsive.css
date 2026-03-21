@@ -1,0 +1,296 @@
+/**
+ * 响应式布局样式
+ * 混合方案：70% 自适应 + 30% 响应式
+ */
+
+/* ============================================
+   断点定义 - 更细粒度
+   ============================================ */
+:root {
+  /* 响应式断点 */
+  --breakpoint-xs: 375px;      /* 小屏手机（iPhone SE） */
+  --breakpoint-sm: 480px;      /* 中屏手机 */
+  --breakpoint-md: 768px;      /* 大屏手机/小平板 */
+  --breakpoint-lg: 1024px;     /* 平板 */
+  --breakpoint-xl: 1400px;     /* 桌面端 */
+  
+  /* 容器最大宽度 */
+  --container-max-width: 1400px;
+  
+  /* 间距（使用 rem，自适应） */
+  --spacing-xs: clamp(0.25rem, 0.5vw, 0.5rem);
+  --spacing-sm: clamp(0.5rem, 1vw, 1rem);
+  --spacing-md: clamp(1rem, 2vw, 1.5rem);
+  --spacing-lg: clamp(1.5rem, 3vw, 2rem);
+  --spacing-xl: clamp(2rem, 4vw, 3rem);
+  
+  /* 字体大小（流体尺寸） */
+  --font-size-xs: clamp(0.75rem, 1.5vw, 0.875rem);
+  --font-size-sm: clamp(0.875rem, 2vw, 1rem);
+  --font-size-base: clamp(1rem, 2.5vw, 1.125rem);
+  --font-size-lg: clamp(1.125rem, 3vw, 1.25rem);
+  --font-size-xl: clamp(1.25rem, 4vw, 1.5rem);
+  --font-size-2xl: clamp(1.5rem, 5vw, 2rem);
+  --font-size-3xl: clamp(2rem, 6vw, 2.5rem);
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   通用响应式工具类
+   ============================================ */
+
+/* 容器最大宽度限制 */
+.container-responsive {
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: 0 var(--spacing-md);
+}
+
+/* 隐藏/显示工具类 */
+.hide-mobile {
+  display: block;
+}
+
+.show-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+  
+  .show-mobile {
+    display: block !important;
+  }
+}
+
+/* ============================================
+   小屏手机优化（≤375px，如 iPhone SE）
+   ============================================ */
+@media (max-width: 375px) {
+  html {
+    font-size: 13px;
+  }
+  
+  .modern-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+  
+  .n-button {
+    min-height: 42px;
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  
+  .n-input,
+  .n-select,
+  .n-textarea {
+    font-size: 16px;
+    min-height: 42px;
+  }
+}
+
+/* ============================================
+   中屏手机优化（376px - 480px）
+   ============================================ */
+@media (min-width: 376px) and (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+  
+  .modern-card {
+    padding: 14px;
+  }
+  
+  .n-button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+}
+
+/* ============================================
+   大屏手机优化（481px - 768px）
+   ============================================ */
+@media (min-width: 481px) and (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+  
+  .modern-card {
+    padding: 16px;
+  }
+}
+
+/* ============================================
+   移动端通用优化（≤768px）
+   ============================================ */
+@media (max-width: 768px) {
+  /* 基础调整 */
+  html {
+    font-size: 14px; /* 移动端基础字体稍小 */
+  }
+  
+  /* 减少内边距 */
+  body {
+    padding: 0;
+  }
+  
+  /* 卡片优化 - 更现代化 */
+  .modern-card {
+    margin-bottom: var(--spacing-md);
+    border-radius: 16px !important;
+    background: color-mix(in srgb, var(--ui-glass-light) 88%, #fff 12%) !important;
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 
+      0 8px 24px rgba(0, 0, 0, 0.1),
+      0 2px 8px var(--ui-accent-soft) !important;
+    border: 1px solid var(--ui-border-light) !important;
+  }
+  
+  .dark .modern-card {
+    background: color-mix(in srgb, var(--ui-glass-dark) 90%, #111 10%) !important;
+    border-color: var(--ui-border-dark) !important;
+  }
+  
+  /* 按钮尺寸和触摸优化 */
+  .n-button {
+    min-height: 44px; /* iOS 推荐的最小触摸目标 */
+    padding: 0 20px;
+    font-size: 15px;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+  
+  .n-button:active {
+    transform: scale(0.96);
+  }
+  
+  /* 输入框尺寸 */
+  .n-input,
+  .n-select,
+  .n-textarea {
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    min-height: 44px;
+    border-radius: 12px;
+  }
+  
+  /* 标签优化 */
+  .n-tag {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+  
+  /* 卡片列表间距 */
+  .logs-list,
+  .datasource-grid {
+    gap: 12px;
+  }
+  
+  /* 触摸反馈优化 */
+  * {
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--ui-accent) 14%, transparent 86%);
+  }
+  
+  /* 滚动优化 */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* 空状态优化 */
+  .n-empty {
+    padding: 40px 20px !important;
+  }
+  
+  .n-empty .n-empty__description {
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  
+  /* 分页优化 */
+  .pagination-bar {
+    padding: 16px 0;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  
+  /* 统计卡片优化 */
+  .stat-card {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  
+  /* 表单优化 */
+  .n-form-item {
+    margin-bottom: 20px;
+  }
+  
+  .n-form-item-label {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+}
+
+/* ============================================
+   平板优化（769px - 1024px）
+   ============================================ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* ============================================
+   桌面端优化（≥1025px）
+   ============================================ */
+@media (min-width: 1025px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+/* ============================================
+   超宽屏优化（≥1400px）
+   ============================================ */
+@media (min-width: 1400px) {
+  .container-responsive {
+    padding: 0 var(--spacing-xl);
+  }
+}
+
+/* ============================================
+   模态框移动端优化
+   ============================================ */
+@media (max-width: 768px) {
+  /* Naive UI 模态框移动端全屏 */
+  :deep(.n-modal) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+  
+  :deep(.n-modal .n-card) {
+    border-radius: 0 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  :deep(.n-modal .n-card__content) {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+

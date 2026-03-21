@@ -1,0 +1,99 @@
+/* Theme presets: lightweight style switch with strong visual character */
+
+:root,
+:root[data-ui-theme='harbor-ink'] {
+  --ui-font-sans: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-font-display: "DIN Alternate", "Bahnschrift", "Source Han Sans SC", sans-serif;
+  --ui-font-mono: "JetBrains Mono", "Consolas", monospace;
+
+  --ui-accent: #0b7a8f;
+  --ui-accent-strong: #0e8ca5;
+  --ui-accent-soft: rgba(11, 122, 143, 0.18);
+  --ui-accent-grad: linear-gradient(135deg, #0d6f84 0%, #3e94a4 100%);
+
+  --ui-bg-overlay-top: rgba(244, 250, 252, 0.08);
+  --ui-bg-overlay-bottom: rgba(10, 30, 36, 0.28);
+
+  --ui-glass-light: rgba(245, 252, 253, 0.7);
+  --ui-glass-dark: rgba(11, 22, 28, 0.6);
+  --ui-panel-light: rgba(255, 255, 255, 0.16);
+  --ui-panel-dark: rgba(7, 18, 24, 0.36);
+  --ui-border-light: rgba(255, 255, 255, 0.35);
+  --ui-border-dark: rgba(165, 204, 212, 0.2);
+
+  --ui-text-primary-light: #17323a;
+  --ui-text-secondary-light: #34545c;
+  --ui-text-primary-dark: #e5f2f5;
+  --ui-text-secondary-dark: #a9c7cd;
+
+  --ui-shadow-card: 0 10px 36px rgba(7, 35, 43, 0.18);
+}
+
+:root[data-ui-theme='amber-paper'] {
+  --ui-font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-font-display: "Source Han Serif SC", "STSong", serif;
+  --ui-font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+  --ui-accent: #8a5a19;
+  --ui-accent-strong: #a56a1e;
+  --ui-accent-soft: rgba(138, 90, 25, 0.16);
+  --ui-accent-grad: linear-gradient(135deg, #7c4d17 0%, #b3823a 100%);
+
+  --ui-bg-overlay-top: rgba(255, 252, 244, 0.12);
+  --ui-bg-overlay-bottom: rgba(66, 49, 29, 0.24);
+
+  --ui-glass-light: rgba(255, 250, 240, 0.82);
+  --ui-glass-dark: rgba(41, 33, 24, 0.64);
+  --ui-panel-light: rgba(255, 249, 236, 0.3);
+  --ui-panel-dark: rgba(40, 30, 20, 0.45);
+  --ui-border-light: rgba(212, 185, 150, 0.55);
+  --ui-border-dark: rgba(233, 211, 183, 0.25);
+
+  --ui-text-primary-light: #3d2f20;
+  --ui-text-secondary-light: #5e4c3a;
+  --ui-text-primary-dark: #faecd8;
+  --ui-text-secondary-dark: #d3b893;
+
+  --ui-shadow-card: 0 12px 30px rgba(70, 48, 22, 0.18);
+}
+
+:root[data-ui-theme='carbon-neon'] {
+  --ui-font-sans: "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+  --ui-font-display: "Sora", "Bahnschrift", "Segoe UI", sans-serif;
+  --ui-font-mono: "JetBrains Mono", "Consolas", monospace;
+
+  --ui-accent: #2ec0d1;
+  --ui-accent-strong: #33d9ec;
+  --ui-accent-soft: rgba(46, 192, 209, 0.2);
+  --ui-accent-grad: linear-gradient(135deg, #1aa8bd 0%, #5be7f6 100%);
+
+  --ui-bg-overlay-top: rgba(96, 125, 139, 0.07);
+  --ui-bg-overlay-bottom: rgba(5, 10, 18, 0.45);
+
+  --ui-glass-light: rgba(238, 248, 252, 0.7);
+  --ui-glass-dark: rgba(5, 12, 21, 0.72);
+  --ui-panel-light: rgba(240, 250, 255, 0.2);
+  --ui-panel-dark: rgba(8, 16, 28, 0.56);
+  --ui-border-light: rgba(173, 224, 232, 0.42);
+  --ui-border-dark: rgba(123, 203, 214, 0.24);
+
+  --ui-text-primary-light: #0e2731;
+  --ui-text-secondary-light: #1d4856;
+  --ui-text-primary-dark: #e1f8ff;
+  --ui-text-secondary-dark: #9dc6d1;
+
+  --ui-shadow-card: 0 14px 38px rgba(2, 25, 37, 0.28);
+}
+
+body,
+#app {
+  font-family: var(--ui-font-sans);
+}
+
+.gradient-text,
+.section-title,
+.about-title {
+  background: var(--ui-accent-grad) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}

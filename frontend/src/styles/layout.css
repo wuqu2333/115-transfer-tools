@@ -1,0 +1,245 @@
+/* Layout 主样式 */
+.layout {
+  --layout-header-height: 72px;
+  --layout-footer-height: 48px;
+  --layout-content-bottom-padding: calc(var(--layout-footer-height) + 24px);
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+/* 背景遮罩（统一控制对比度） */
+.layout::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* 默认：轻微暗化 + 柔和渐变，保证浅色主题下文字也不会直接贴在原图上 */
+  background:
+    radial-gradient(circle at 20% 20%, var(--ui-bg-overlay-top), transparent 55%),
+    radial-gradient(circle at 80% 80%, var(--ui-bg-overlay-bottom), transparent 55%),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0.28));
+  z-index: 0;
+  pointer-events: none;
+}
+.dark .layout::before {
+  background-color: rgba(0, 0, 0, 0.52);
+}
+/* 确保背景正确显示 */
+.layout.bing-bg,
+.layout.custom-bg {
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+}
+/* 渐变色背景 */
+.animated-bg {
+  background: linear-gradient(-45deg, #f4fbfc, #edf7f7, #e8f2ef, #f7efe2, #dff3f4, #ecf8fb) !important;
+  background-size: 400% 400% !important;
+  animation: gradientShift 15s ease infinite !important;
+}
+.dark .animated-bg {
+  background: linear-gradient(-45deg, #0f1d2a, #112635, #152a35, #1a2532, #182737, #1a3040) !important;
+  background-size: 400% 400% !important;
+  animation: gradientShift 20s ease infinite !important;
+}
+/* 渐变动画关键帧 */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.layout-container {
+  height: 100vh;
+  min-height: 100vh;
+  background: transparent !important;
+  position: relative;
+  z-index: 1;
+}
+
+.main-layout-shell {
+  height: 100vh;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 确保 n-layout 组件背景透明 */
+:deep(.n-layout) {
+  background: transparent !important;
+}
+:deep(.n-layout-scroll-container) {
+  background: transparent !important;
+}
+/* 移动端菜单按钮 */
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+  background: color-mix(in srgb, var(--ui-panel-light) 88%, #fff 12%);
+  backdrop-filter: blur(10px);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.dark .mobile-menu-toggle {
+  background: color-mix(in srgb, var(--ui-panel-dark) 86%, #000 14%);
+}
+/* 移动端遮罩层 */
+.mobile-menu-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+/* 主内容区 */
+.main-content {
+  --layout-content-padding: clamp(16px, 3vw, 32px);
+  background: color-mix(in srgb, var(--ui-panel-light) 32%, transparent 68%);
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.dark .main-content {
+  background: color-mix(in srgb, var(--ui-panel-dark) 28%, transparent 72%);
+}
+.page-shell {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 clamp(16px, 3vw, 32px);
+}
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 20px);
+}
+.action-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+/* 页面切换动画 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+/* ============================================
+   移动端响应式样式（≤768px）
+   ============================================ */
+@media (max-width: 768px) {
+  .layout {
+    --layout-header-height: 64px;
+    --layout-footer-height: 56px;
+    --layout-content-bottom-padding: calc(var(--layout-footer-height) + env(safe-area-inset-bottom, 0px) + 20px);
+  }
+
+  .page-shell {
+    padding: 0 16px;
+  }
+  .mobile-menu-toggle {
+    display: block;
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+  }
+  
+  .mobile-menu-overlay {
+    display: block;
+  }
+  
+  .main-content {
+    --layout-content-padding: 14px;
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  
+  .mobile-menu-toggle {
+    backdrop-filter: blur(20px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  
+  .mobile-menu-toggle:not(.dark) {
+    background: color-mix(in srgb, var(--ui-panel-light) 92%, #fff 8%) !important;
+    border: 1px solid var(--ui-border-light);
+  }
+  
+  .dark .mobile-menu-toggle,
+  html.dark .mobile-menu-toggle {
+    background: color-mix(in srgb, var(--ui-panel-dark) 92%, #000 8%) !important;
+    border-color: var(--ui-border-dark);
+  }
+  
+  .mobile-menu-toggle:active {
+    transform: scale(0.95);
+  }
+}
+/* ============================================
+   平板响应式样式（769px - 1024px）
+   ============================================ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .main-content {
+    padding: 24px !important;
+  }
+}
+/* ============================================
+   桌面端优化（≥1025px）
+   ============================================ */
+@media (min-width: 1025px) {
+  .mobile-menu-toggle {
+    display: none !important;
+  }
+  
+  .mobile-menu-overlay {
+    display: none !important;
+  }
+}
+@media (max-width: 375px) {
+  .page-shell {
+    padding: 0 12px;
+  }
+
+  .main-content {
+    --layout-content-padding: 12px;
+  }
+}
+@media (min-width: 376px) and (max-width: 480px) {
+  .page-shell {
+    padding: 0 14px;
+  }
+
+  .main-content {
+    --layout-content-padding: 14px;
+  }
+}
+@media (min-width: 481px) and (max-width: 768px) {
+  .page-shell {
+    padding: 0 16px;
+  }
+
+  .main-content {
+    --layout-content-padding: 16px;
+  }
+}

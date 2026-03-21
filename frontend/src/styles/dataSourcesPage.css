@@ -1,0 +1,486 @@
+﻿.datasources-page {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 clamp(16px, 3vw, 32px);
+}
+
+.modern-card {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  animation: fadeIn 0.5s ease-out;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-card:hover {
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 
+    0 12px 48px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transform: translateY(-2px);
+}
+
+.dark .modern-card {
+  background: rgba(20, 20, 20, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-header-center {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.card-title-center {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.title-emoji {
+  /* 恢复 emoji 原色，不受渐变文字效果影响 */
+  -webkit-text-fill-color: initial !important;
+  color: initial !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.card-description-center {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+.dark .card-description-center {
+  color: #999;
+}
+
+.add-btn {
+  border-radius: 12px !important;
+  height: 48px;
+  padding: 0 24px;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+.add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* 数据源网格 - 响应式布局 */
+.datasource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: clamp(16px, 3vw, 24px);
+  margin-top: clamp(16px, 3vw, 24px);
+}
+
+/* 移动端：单列布局 */
+@media (max-width: 768px) {
+  .datasource-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+}
+
+/* 骞虫澘锛氫袱鍒楀竷灞€ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .datasource-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
+/* 桌面端：3-4 列布局 */
+@media (min-width: 1025px) {
+  .datasource-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+.datasource-card {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(16px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+  border-radius: 16px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid rgba(102, 126, 234, 0.3);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.datasource-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.datasource-card:hover::before {
+  transform: scaleX(1);
+}
+
+.datasource-card:hover {
+  transform: translateY(-8px);
+  background: rgba(255, 255, 255, 0.75) !important;
+  box-shadow: 
+    0 12px 40px rgba(102, 126, 234, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border-color: rgba(102, 126, 234, 0.5);
+}
+
+.dark .datasource-card {
+  background: rgba(30, 30, 30, 0.6) !important;
+  border-color: rgba(102, 126, 234, 0.3);
+}
+
+.dark .datasource-card:hover {
+  background: rgba(40, 40, 40, 0.75) !important;
+  box-shadow: 
+    0 12px 40px rgba(102, 126, 234, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* 移动端卡片优化 - 现代化设计 */
+@media (max-width: 768px) {
+  .datasource-card {
+    padding: 20px;
+    border-radius: 16px;
+    border: 2px solid rgba(102, 126, 234, 0.2);
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 
+      0 8px 24px rgba(0, 0, 0, 0.1),
+      0 2px 8px rgba(102, 126, 234, 0.1);
+  }
+  
+  .dark .datasource-card {
+    background: rgba(30, 30, 30, 0.95) !important;
+    border-color: rgba(102, 126, 234, 0.3);
+  }
+  
+  .datasource-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+  
+  /* 移动端卡片布局 - 横向布局 */
+  .datasource-card {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px;
+  }
+  
+  .card-icon {
+    flex-shrink: 0;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-radius: 12px;
+    margin-bottom: 0;
+  }
+  
+  .ds-type-icon {
+    width: 48px !important;
+    height: 48px !important;
+  }
+  
+  .ds-type-icon-emoji {
+    font-size: 32px;
+  }
+  
+  .card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .ds-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .dark .ds-name {
+    color: rgba(255, 255, 255, 0.9);
+  }
+  
+  .ds-url {
+    font-size: 13px;
+    color: #666;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .dark .ds-url {
+    color: rgba(255, 255, 255, 0.6);
+  }
+  
+  .ds-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  
+  .ds-time {
+    font-size: 12px;
+    color: #999;
+    order: 2;
+  }
+  
+  .dark .ds-time {
+    color: rgba(255, 255, 255, 0.5);
+  }
+  
+  /* 移动端按钮组 - 垂直排列，全宽，清晰可见 */
+  .ds-actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+    order: 1;
+    margin-top: 12px;
+  }
+  
+  .ds-actions .action-btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 15px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    justify-content: center;
+  }
+  
+  .ds-actions .action-btn:active {
+    transform: scale(0.98);
+  }
+  
+  /* 标签移动端优化 */
+  .card-info .n-tag {
+    margin-top: 4px;
+    align-self: flex-start;
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+  
+  /* 时间显示优化 */
+  .ds-time {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 8px;
+  }
+}
+
+/* ============================================
+   小屏手机优化（<=375px，如 iPhone SE）
+   ============================================ */
+@media (max-width: 375px) {
+  .datasource-card {
+    padding: 14px;
+    gap: 12px;
+  }
+  
+  .card-icon {
+    width: 56px;
+    height: 56px;
+  }
+  
+  .ds-type-icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  
+  .ds-name {
+    font-size: 16px;
+  }
+  
+  .ds-url {
+    font-size: 12px;
+  }
+  
+  .ds-actions .action-btn {
+    font-size: 14px;
+    padding: 10px 14px;
+    min-height: 42px;
+  }
+}
+
+/* ============================================
+   中屏手机优化（376px - 480px）
+   ============================================ */
+@media (min-width: 376px) and (max-width: 480px) {
+  .datasource-card {
+    padding: 16px;
+  }
+  
+  .card-icon {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .ds-name {
+    font-size: 17px;
+  }
+}
+
+/* ============================================
+   大屏手机优化（481px - 768px）
+   ============================================ */
+@media (min-width: 481px) and (max-width: 768px) {
+  .datasource-card {
+    padding: 20px;
+  }
+  
+  .card-icon {
+    width: 64px;
+    height: 64px;
+  }
+  
+  .ds-name {
+    font-size: 18px;
+  }
+  
+  /* 大屏手机可横向排列按钮（2 行） */
+  .ds-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .ds-actions .action-btn {
+    flex: 1;
+    min-width: calc(50% - 5px);
+  }
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ds-type-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.ds-type-icon-emoji {
+  font-size: 48px;
+}
+
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ds-url {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+  word-break: break-all;
+}
+
+.ds-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .ds-footer {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.ds-time {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* 妯℃€佹 */
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.modal-header p {
+  margin: 4px 0 0 0;
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+/* 琛ㄥ崟鍦嗚鍖?*/
+:deep(.n-input),
+:deep(.n-select),
+:deep(.n-button) {
+  border-radius: 12px !important;
+}
+
+:deep(.n-radio) {
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+:deep(.n-radio:hover) {
+  background: rgba(102, 126, 234, 0.1);
+}
